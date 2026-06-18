@@ -149,24 +149,27 @@ function manageAttackInterval(botId, delaySeconds, action) {
         // Snaps look vector to the armor stand's chest once to satisfy anti-cheat line-of-sight checks
         bot.lookAt(standPos.offset(0, 1, 0), true); 
 
+const Vec3 = require('vec3');
+const standPos = new Vec3(-44598.5, 154.0, -43672.5);
+
 const intervalId = setInterval(() => {
     const activeBot = bots[botId];
     if (activeBot && activeBot.entity) {
-        // Prevent crits/sprinting
         activeBot.setControlState('sprint', false);
         activeBot.setControlState('jump', false);
 
-        // Find the stand safely
+        // Find ANY entity standing within 1.5 blocks of the armor stand coordinates
         const target = activeBot.nearestEntity(entity => {
-            return entity.name && entity.name.toLowerCase().includes('stand') &&
-                   entity.position.distanceTo(activeBot.entity.position) < 4;
+            return entity.position.distanceTo(standPos) < 1.5 && entity.id !== activeBot.entity.id;
         });
 
         if (target) {
-            // Force lock the camera angle right before hitting so the server registers the sweep
+            // Face the exact entity position and hit
             activeBot.lookAt(target.position.offset(0, 1, 0), true); 
             activeBot.attack(target); 
         } else {
+            // Log to console if the bot can't see the entity at the coordinates
+            sendLog(`[WARN] No entity found at stand coordinates.`);
             activeBot.swingArm('right');
         }
     } else {
