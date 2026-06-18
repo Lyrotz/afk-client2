@@ -9,7 +9,11 @@ const attackIntervals = {};
 const attackConfigs = {};
 const survivalIntervals = {};
 const reconnectTimeouts = {};
+const potionIntervals = {};
+const potionConfigs = {};
 const clients = [];
+
+const OMINOUS_POTION_INTERVAL_MS = 39 * 60 * 1000; // 39 minutes
 
 function sendLog(msg) {
 	const logEntry = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -65,6 +69,11 @@ function initBot(username, password) {
 					delete attackIntervals[botId];
 					manageAttackInterval(botId, attackConfigs[botId].delay, 'start');
 				}
+				if (potionConfigs[botId] && potionConfigs[botId].active) {
+					sendLog(`Resuming Ominous Potion loop for ${username}...`);
+					delete potionIntervals[botId];
+					managePotionInterval(botId, 'start');
+				}
 			}, 3000);
 		}, 1000);
 	});
@@ -100,6 +109,10 @@ function cleanupBotState(botId) {
 	if (survivalIntervals[botId]) {
 		clearInterval(survivalIntervals[botId]);
 		delete survivalIntervals[botId];
+	}
+	if (potionIntervals[botId]) {
+		clearInterval(potionIntervals[botId]);
+		delete potionIntervals[botId];
 	}
 }
 
@@ -168,6 +181,84 @@ function manageAttackInterval(botId, delaySeconds, action) {
 		return {
 			status: 'success',
 			message: 'Attack stopped.'
+		};
+	}
+	return {
+		status: 'error',
+		message: 'Invalid action.'
+	};
+}
+
+function findOminousPotion(bot) {
+	// Matches on either the internal item id or its display name, since
+	// custom server items often only differ in display name.
+	return bot.inventory.items().find(item => {
+		const name = (item.name || '').toLowerCase();
+		const displayName = (item.displayName || '').toLowerCase();
+		return name.includes('ominous') || displayName.includes('ominous');
+	});
+}
+
+async function drinkOminousPotion(botId) {
+	const bot = bots[botId];
+	if (!bot) return;
+	const item = findOminousPotion(bot);
+	if (!item) {
+		sendLog(`${bot.originalName} has no Ominous Potion in inventory, skipping.`);
+		return;
+	}
+	try {
+		await bot.equip(item, 'hand');
+		await bot.consume();
+		sendLog(`${bot.originalName} drank an Ominous Potion.`);
+	} catch (err) {
+		sendLog(`[ERR] ${bot.originalName} failed to drink Ominous Potion: ${err.message}`);
+	}
+}
+
+function managePotionInterval(botId, action) {
+	const bot = bots[botId];
+	if (!bot) return {
+		status: 'error',
+		message: 'Bot offline.'
+	};
+	const username = bot.originalName;
+	if (action === 'start') {
+		if (potionIntervals[botId]) return {
+			status: 'error',
+			message: 'Already running.'
+		};
+		potionConfigs[botId] = {
+			active: true
+		};
+		sendLog(`Starting Ominous Potion loop for ${username} (every 39m).`);
+		drinkOminousPotion(botId);
+		const intervalId = setInterval(() => {
+			if (bots[botId]) {
+				drinkOminousPotion(botId);
+			} else {
+				clearInterval(intervalId);
+				delete potionIntervals[botId];
+			}
+		}, OMINOUS_POTION_INTERVAL_MS);
+		potionIntervals[botId] = intervalId;
+		return {
+			status: 'success',
+			message: 'Potion loop started.'
+		};
+	}
+	if (action === 'stop') {
+		if (!potionIntervals[botId]) return {
+			status: 'error',
+			message: 'Not running.'
+		};
+		if (potionConfigs[botId]) potionConfigs[botId].active = false;
+		clearInterval(potionIntervals[botId]);
+		delete potionIntervals[botId];
+		sendLog(`Stopped Ominous Potion loop for ${username}.`);
+		return {
+			status: 'success',
+			message: 'Potion loop stopped.'
 		};
 	}
 	return {
@@ -330,6 +421,14 @@ app.post('/api/bots/attack/start', (req, res) => {
 });
 app.post('/api/bots/attack/stop', (req, res) => {
 	const response = manageAttackInterval(req.body.username.toLowerCase(), null, 'stop');
+	res.status(response.status === 'success' ? 200 : 400).send(response);
+});
+app.post('/api/bots/potion/start', (req, res) => {
+	const response = managePotionInterval(req.body.username.toLowerCase(), 'start');
+	res.status(response.status === 'success' ? 200 : 400).send(response);
+});
+app.post('/api/bots/potion/stop', (req, res) => {
+	const response = managePotionInterval(req.body.username.toLowerCase(), 'stop');
 	res.status(response.status === 'success' ? 200 : 400).send(response);
 });
 app.listen(process.env.PORT || 3000);
