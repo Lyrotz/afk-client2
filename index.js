@@ -140,43 +140,36 @@ function manageAttackInterval(botId, delaySeconds, action) {
         if (attackIntervals[botId]) return { status: 'error', message: 'Already attacking.' };
         attackConfigs[botId] = { active: true, delay: delaySeconds };
         
-        // Exact armor stand coordinates parsed from your logs
         const Vec3 = require('vec3');
         const standPos = new Vec3(-44598.5, 154.0, -43672.5);
-        
-        sendLog(`Starting zero-movement sweep loop for ${username}`);
-        
-        // Snaps look vector to the armor stand's chest once to satisfy anti-cheat line-of-sight checks
-        bot.lookAt(standPos.offset(0, 1, 0), true); 
 
-const Vec3 = require('vec3');
-const standPos = new Vec3(-44598.5, 154.0, -43672.5);
+        sendLog(`Starting coordinate-based sweep loop for ${username}`);
 
-const intervalId = setInterval(() => {
-    const activeBot = bots[botId];
-    if (activeBot && activeBot.entity) {
-        activeBot.setControlState('sprint', false);
-        activeBot.setControlState('jump', false);
+        const intervalId = setInterval(() => {
+            const activeBot = bots[botId];
+            if (activeBot && activeBot.entity) {
+                // Ensure zero movement
+                activeBot.setControlState('sprint', false);
+                activeBot.setControlState('jump', false);
 
-        // Find ANY entity standing within 1.5 blocks of the armor stand coordinates
-        const target = activeBot.nearestEntity(entity => {
-            return entity.position.distanceTo(standPos) < 1.5 && entity.id !== activeBot.entity.id;
-        });
+                // Target by coordinates to bypass custom server entity names
+                const target = activeBot.nearestEntity(entity => {
+                    return entity.position.distanceTo(standPos) < 1.5 && entity.id !== activeBot.entity.id;
+                });
 
-        if (target) {
-            // Face the exact entity position and hit
-            activeBot.lookAt(target.position.offset(0, 1, 0), true); 
-            activeBot.attack(target); 
-        } else {
-            // Log to console if the bot can't see the entity at the coordinates
-            sendLog(`[WARN] No entity found at stand coordinates.`);
-            activeBot.swingArm('right');
-        }
-    } else {
-        clearInterval(intervalId);
-        delete attackIntervals[botId];
-    }
-}, delaySeconds * 1000);
+                if (target) {
+                    // Instantly sync angle and hit
+                    activeBot.lookAt(target.position.offset(0, 1, 0), true); 
+                    activeBot.attack(target); 
+                } else {
+                    sendLog(`[WARN] No entity found at target coordinates.`);
+                    activeBot.swingArm('right');
+                }
+            } else {
+                clearInterval(intervalId);
+                delete attackIntervals[botId];
+            }
+        }, delaySeconds * 1000);
         
         attackIntervals[botId] = intervalId;
         return { status: 'success', message: 'Attack started.' };
