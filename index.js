@@ -140,29 +140,25 @@ function manageAttackInterval(botId, delaySeconds, action) {
         if (attackIntervals[botId]) return { status: 'error', message: 'Already attacking.' };
         attackConfigs[botId] = { active: true, delay: delaySeconds };
         
-        const Vec3 = require('vec3');
-        const standPos = new Vec3(-44598.5, 154.0, -43672.5);
-
-        sendLog(`Starting coordinate-based sweep loop for ${username}`);
+        sendLog(`Starting zero-rotation attack loop for ${username}`);
 
         const intervalId = setInterval(() => {
             const activeBot = bots[botId];
             if (activeBot && activeBot.entity) {
-                // Ensure zero movement
+                // Keep bot grounded to prevent crit modification
                 activeBot.setControlState('sprint', false);
                 activeBot.setControlState('jump', false);
 
-                // Target by coordinates to bypass custom server entity names
+                // Find the nearest armor stand within 4 blocks
                 const target = activeBot.nearestEntity(entity => {
-                    return entity.position.distanceTo(standPos) < 1.5 && entity.id !== activeBot.entity.id;
+                    return entity.name === 'armor_stand' &&
+                           entity.position.distanceTo(activeBot.entity.position) < 4;
                 });
 
                 if (target) {
-                    // Instantly sync angle and hit
-                    activeBot.lookAt(target.position.offset(0, 1, 0), true); 
+                    // Attack packet sent directly with zero head turning
                     activeBot.attack(target); 
                 } else {
-                    sendLog(`[WARN] No entity found at target coordinates.`);
                     activeBot.swingArm('right');
                 }
             } else {
