@@ -242,10 +242,17 @@
             </div>
 
             <div class="divider">--------------------------------</div>
-<button onclick="checkInventory()" style="width: 100%;">SCAN_CARGO_HOLD</button>
-<button onclick="action('drop')" style="width: 100%; margin-top: 0.5rem; color: #ff3333;">JETTISON_CARGO_HOLD</button>
-<button onclick="drinkPotion()" style="width: 100%; margin-top: 0.5rem; color: #bb33ff;">CONSUME_POTION</button>
+            
+            <div class="row">
+                <span>POTION LOOP:</span>
+                <button onclick="potionLoop('start')" style="flex: 1; color: #bb33ff;">START_POTION</button>
+                <button onclick="potionLoop('stop')" style="flex: 1;">STOP_POTION</button>
+            </div>
+
+            <button onclick="drinkPotion()" style="width: 100%; margin-top: 0.5rem; color: #bb33ff;">CONSUME_ONCE</button>
+            <button onclick="checkInventory()" style="width: 100%; margin-top: 0.5rem;">SCAN_CARGO_HOLD</button>
             <button onclick="action('drop')" style="width: 100%; margin-top: 0.5rem; color: #ff3333;">JETTISON_CARGO_HOLD</button>
+            
             <div id="invResult" style="margin-top: 1rem;"></div>
         </div>
 
@@ -272,10 +279,15 @@
     </div>
 
     <script>
-function drinkPotion() {
-    const bot = document.getElementById('bot-select').value;
-    if (bot) req('/api/bots/potion', { username: bot });
-}
+        function drinkPotion() {
+            const bot = document.getElementById('bot-select').value;
+            if (bot) req('/api/bots/potion', { username: bot });
+        }
+        
+        function potionLoop(state) {
+            const bot = document.getElementById('bot-select').value;
+            if (bot) req(`/api/bots/potion/${state}`, { username: bot });
+        }
         
         setInterval(() => {
             const now = new Date();
@@ -303,123 +315,4 @@ function drinkPotion() {
         }
 
         async function updateBotLists() {
-            const res = await fetch('/api/bots');
-            const bots = await res.json();
-            
-            const ctrlSelect = document.getElementById('bot-select');
-            const chatSelect = document.getElementById('chat-target-select');
-            
-            const lastCtrlVal = ctrlSelect.value;
-            const lastChatVal = chatSelect.value;
-
-            ctrlSelect.innerHTML = '';
-            chatSelect.innerHTML = '<option value="all">BROADCAST_TO_ALL_NODES</option>';
-
-            if (bots.length === 0) {
-                ctrlSelect.innerHTML = '<option value="" disabled selected>AWAITING_CONNECTION...</option>';
-                return;
-            }
-
-            bots.forEach(b => {
-                const opt1 = document.createElement('option');
-                opt1.value = b; opt1.innerText = `NODE::${b}`;
-                ctrlSelect.appendChild(opt1);
-
-                const opt2 = document.createElement('option');
-                opt2.value = b; opt2.innerText = `NODE::${b}`;
-                chatSelect.appendChild(opt2);
-            });
-
-            if (bots.includes(lastCtrlVal)) ctrlSelect.value = lastCtrlVal;
-            if (lastChatVal === 'all' || bots.includes(lastChatVal)) chatSelect.value = lastChatVal;
-        }
-
-        setInterval(updateBotLists, 3000);
-
-        function addBot() {
-            req('/api/bots/add', { username: user.value, password: pass.value });
-            user.value = ''; pass.value = '';
-        }
-
-        // NEW: Handle reading the text file and pushing the data to the backend
-        function handleBatchUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const text = e.target.result;
-                const lines = text.split('\n');
-                const accounts = [];
-
-                lines.forEach(line => {
-                    const parts = line.trim().split(/\s+/); // Splits by any whitespace
-                    if (parts.length >= 2) {
-                        accounts.push({ username: parts[0], password: parts[1] });
-                    }
-                });
-
-                if (accounts.length > 0) {
-                    req('/api/bots/batch-add', { accounts: accounts });
-                } else {
-                    setStatus("ERR: FILE_EMPTY_OR_INVALID");
-                }
-                
-                // Reset file input so the same file can be uploaded again if needed
-                event.target.value = ''; 
-            };
-            reader.readAsText(file);
-        }
-
-        function action(type) {
-            const bot = document.getElementById('bot-select').value;
-            if (bot) req(`/api/bots/${type}`, { username: bot });
-        }
-
-        function attack(state) {
-            const bot = document.getElementById('bot-select').value;
-            const delay = parseFloat(document.getElementById('delay').value);
-            if (bot) req(`/api/bots/attack/${state}`, { username: bot, delay });
-        }
-
-        function swapHotbar() {
-            const bot = document.getElementById('bot-select').value;
-            const slot = document.getElementById('hotbar-slot').value;
-            if (bot) req('/api/bots/hotbar', { username: bot, slot: slot });
-        }
-
-        function sendChat() {
-            const target = document.getElementById('chat-target-select').value;
-            req('/api/bots/chat', { target: target, message: msg.value });
-            msg.value = '';
-        }
-
-        async function checkInventory() {
-            const user = document.getElementById('bot-select').value;
-            if (!user) return;
-            
-            const res = await fetch(`/api/bots/${user}/inventory`);
-            const data = await res.json();
-            const invContainer = document.getElementById('invResult');
-            
-            if (data.error) {
-                invContainer.innerText = `[ERR] ${data.error}`;
-                return;
-            }
-
-            if (data.length === 0) {
-                invContainer.innerHTML = '<div style="text-align: center; opacity: 0.5;">[ CARGO_HOLD_EMPTY ]</div>';
-                return;
-            }
-
-            let html = '<ul>';
-            data.forEach(item => {
-                const countStr = String(item.count).padStart(3, '0');
-                html += `<li><span>> ${item.name}</span><span>[x${countStr}]</span></li>`;
-            });
-            html += '</ul>';
-            invContainer.innerHTML = html;
-        }
-    </script>
-</body>
-</html>
+            const res = await fetch('/api
