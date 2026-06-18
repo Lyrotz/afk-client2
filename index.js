@@ -89,10 +89,6 @@ function initBot(username, password) {
                     }
                 }, 600000);
                 
-                potionIntervals[botId] = setInterval(() => {
-                    if (bots[botId]) drinkOminousPotion(bots[botId]);
-                }, 2400000);
-                
                 if (attackConfigs[botId] && attackConfigs[botId].active) {
                     sendLog(`Resuming attack loop for ${username}...`);
                     delete attackIntervals[botId]; 
@@ -237,7 +233,6 @@ app.post('/api/bots/batch-add', async (req, res) => {
     sendLog(`[SYS] Batch login sequence finished.`);
 });
 
-
 app.post('/api/bots/disconnect', (req, res) => {
     const botId = req.body.username.toLowerCase();
     let actionTaken = false;
@@ -257,89 +252,3 @@ app.post('/api/bots/disconnect', (req, res) => {
         bots[botId].quit();
         actionTaken = true;
     }
-
-    if (actionTaken) {
-        res.send({ status: 'success', message: `KILLED_PROCESS: ${botId}` });
-    } else {
-        res.status(404).send({ status: 'error', message: 'NO_PROCESS_FOUND' });
-    }
-});
-
-app.post('/api/bots/chat', (req, res) => {
-    const target = req.body.target.toLowerCase();
-    const { message } = req.body;
-    
-    if (target === 'all') {
-        Object.values(bots).forEach(b => b.chat(message));
-        sendLog(`[OUTGOING BROADCAST]: ${message}`);
-    } else if (bots[target]) {
-        bots[target].chat(message);
-        sendLog(`[OUTGOING] ${bots[target].originalName}: ${message}`);
-    } else {
-        return res.status(404).send({ status: 'error', message: 'Target offline.' });
-    }
-    res.send({ status: 'success', message: 'Message sent.' });
-});
-
-app.post('/api/bots/hotbar', (req, res) => {
-    const botId = req.body.username.toLowerCase();
-    const bot = bots[botId];
-    if (!bot) return res.status(404).send({ error: 'Bot offline' });
-
-    const slotInt = parseInt(req.body.slot);
-    if (isNaN(slotInt) || slotInt < 0 || slotInt > 8) return res.status(400).send({ error: 'Invalid slot' });
-
-    bot.setQuickBarSlot(slotInt);
-    sendLog(`${bot.originalName} changed hotbar to ${slotInt}`);
-    res.send({ status: 'success', message: `Slot set` });
-});
-
-app.get('/api/bots/:username/inventory', (req, res) => {
-    const botId = req.params.username.toLowerCase();
-    const bot = bots[botId];
-    if (!bot) return res.status(404).send({ error: 'Bot offline' });
-    res.send(bot.inventory.items().map(item => ({ name: item.name, count: item.count })));
-});
-
-app.post('/api/bots/drop', async (req, res) => {
-    const botId = req.body.username.toLowerCase();
-    const bot = bots[botId];
-    if (!bot) return res.status(404).send({ error: 'Bot offline.' });
-
-    const items = bot.inventory.items();
-    if (items.length === 0) return res.send({ status: 'success', message: 'EMPTY' });
-
-    res.send({ status: 'success', message: 'DROPPING' });
-    sendLog(`${bot.originalName} jettisoning...`);
-
-    await bot.waitForTicks(10); 
-    for (const item of items) {
-        try {
-            await bot.tossStack(item);
-            await bot.waitForTicks(5); 
-        } catch (err) {
-            sendLog(`[ERR] Drop failed: ${err.message}`);
-        }
-    }
-});
-
-app.post('/api/bots/potion', (req, res) => {
-    const botId = req.body.username.toLowerCase();
-    const bot = bots[botId];
-    if (!bot) return res.status(404).send({ error: 'Bot offline.' });
-
-    res.send({ status: 'success', message: 'CONSUMING_POTION' });
-    drinkOminousPotion(bot);
-});
-
-app.post('/api/bots/attack/start', (req, res) => {
-    const response = manageAttackInterval(req.body.username.toLowerCase(), req.body.delay, 'start');
-    res.status(response.status === 'success' ? 200 : 400).send(response);
-});
-
-app.post('/api/bots/attack/stop', (req, res) => {
-    const response = manageAttackInterval(req.body.username.toLowerCase(), null, 'stop');
-    res.status(response.status === 'success' ? 200 : 400).send(response);
-});
-
-app.listen(process.env.PORT || 3000);
