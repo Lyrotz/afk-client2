@@ -205,7 +205,8 @@ async function drinkHoneyBottle(botId) {
 	}
 	try {
 		await bot.equip(item, 'hand');
-		await bot.consume();
+		await bot.waitForTicks(5);
+		bot.activateItem();
 		sendLog(`${bot.originalName} drank a Honey Bottle.`);
 	} catch (err) {
 		sendLog(`[ERR] ${bot.originalName} failed to drink Honey Bottle: ${err.message}`);
