@@ -272,6 +272,11 @@
     </div>
 
     <script>
+function drinkPotion() {
+    const bot = document.getElementById('bot-select').value;
+    if (bot) req('/api/bots/potion', { username: bot });
+}
+        
         setInterval(() => {
             const now = new Date();
             document.getElementById('clock').innerText = `SYS.TIME: ${now.toLocaleTimeString('en-US', { hour12: false })}`;
