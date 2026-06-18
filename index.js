@@ -13,7 +13,7 @@ const potionIntervals = {};
 const potionConfigs = {};
 const clients = [];
 
-const OMINOUS_POTION_INTERVAL_MS = 39 * 60 * 1000; // 39 minutes
+const HONEY_BOTTLE_INTERVAL_MS = 39 * 60 * 1000; // 39 minutes
 
 function sendLog(msg) {
 	const logEntry = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -70,7 +70,7 @@ function initBot(username, password) {
 					manageAttackInterval(botId, attackConfigs[botId].delay, 'start');
 				}
 				if (potionConfigs[botId] && potionConfigs[botId].active) {
-					sendLog(`Resuming Ominous Potion loop for ${username}...`);
+					sendLog(`Resuming Honey Bottle loop for ${username}...`);
 					delete potionIntervals[botId];
 					managePotionInterval(botId, 'start');
 				}
@@ -189,30 +189,26 @@ function manageAttackInterval(botId, delaySeconds, action) {
 	};
 }
 
-function findOminousPotion(bot) {
-	// Matches on either the internal item id or its display name, since
-	// custom server items often only differ in display name.
-	return bot.inventory.items().find(item => {
-		const name = (item.name || '').toLowerCase();
-		const displayName = (item.displayName || '').toLowerCase();
-		return name.includes('ominous') || displayName.includes('ominous');
-	});
+function findHoneyBottle(bot) {
+	// honey_bottle is a stable vanilla item id, so an exact match is reliable
+	// (no need to guess at custom display names).
+	return bot.inventory.items().find(item => item.name === 'honey_bottle');
 }
 
-async function drinkOminousPotion(botId) {
+async function drinkHoneyBottle(botId) {
 	const bot = bots[botId];
 	if (!bot) return;
-	const item = findOminousPotion(bot);
+	const item = findHoneyBottle(bot);
 	if (!item) {
-		sendLog(`${bot.originalName} has no Ominous Potion in inventory, skipping.`);
+		sendLog(`${bot.originalName} has no Honey Bottle in inventory, skipping.`);
 		return;
 	}
 	try {
 		await bot.equip(item, 'hand');
 		await bot.consume();
-		sendLog(`${bot.originalName} drank an Ominous Potion.`);
+		sendLog(`${bot.originalName} drank a Honey Bottle.`);
 	} catch (err) {
-		sendLog(`[ERR] ${bot.originalName} failed to drink Ominous Potion: ${err.message}`);
+		sendLog(`[ERR] ${bot.originalName} failed to drink Honey Bottle: ${err.message}`);
 	}
 }
 
@@ -231,16 +227,16 @@ function managePotionInterval(botId, action) {
 		potionConfigs[botId] = {
 			active: true
 		};
-		sendLog(`Starting Ominous Potion loop for ${username} (every 39m).`);
-		drinkOminousPotion(botId);
+		sendLog(`Starting Honey Bottle loop for ${username} (every 39m).`);
+		drinkHoneyBottle(botId);
 		const intervalId = setInterval(() => {
 			if (bots[botId]) {
-				drinkOminousPotion(botId);
+				drinkHoneyBottle(botId);
 			} else {
 				clearInterval(intervalId);
 				delete potionIntervals[botId];
 			}
-		}, OMINOUS_POTION_INTERVAL_MS);
+		}, HONEY_BOTTLE_INTERVAL_MS);
 		potionIntervals[botId] = intervalId;
 		return {
 			status: 'success',
@@ -255,7 +251,7 @@ function managePotionInterval(botId, action) {
 		if (potionConfigs[botId]) potionConfigs[botId].active = false;
 		clearInterval(potionIntervals[botId]);
 		delete potionIntervals[botId];
-		sendLog(`Stopped Ominous Potion loop for ${username}.`);
+		sendLog(`Stopped Honey Bottle loop for ${username}.`);
 		return {
 			status: 'success',
 			message: 'Potion loop stopped.'
