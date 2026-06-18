@@ -303,12 +303,15 @@
            <button onclick="action('disconnect')">KILL_PROC</button>
          </div>
          <div class="divider">--------------------------------</div>
-         <div class="row">
-           <span>ATK.DLY(S):</span>
-           <input id="delay" class="short-input" type="number" step="0.5" min="0.5" value="2.0">
-           <button onclick="attack('start')" style="flex: 1;">INIT_ATK</button>
-           <button onclick="attack('stop')" style="flex: 1;">HALT_ATK</button>
-         </div>
+        <div class="row">
+          <span>ATK.DLY(S):</span>
+          <input id="delay" class="short-input" type="number" step="0.5" min="0.5" value="2.0">
+          <button onclick="attack('start')" style="flex: 1;">INIT_ATK</button>
+          <button onclick="attack('stop')" style="flex: 1;">HALT_ATK</button>
+        </div>
+        <div class="row">
+          <button onclick="startPotionLoop()" style="width: 100%; color: #b266ff;">DRINK_OMINOUS_POTION (39M LOOP)</button>
+        </div>
          <div class="row">
            <span>INV.SLOT:</span>
            <select id="hotbar-slot" class="short-input">
@@ -457,6 +460,13 @@
          if (bot) req(`/api/bots/attack/${state}`, {
            username: bot,
            delay
+         });
+       }
+
+       function startPotionLoop() {
+         const bot = document.getElementById('bot-select').value;
+         if (bot) req('/api/bots/potion/start', {
+           username: bot
          });
        }
 
