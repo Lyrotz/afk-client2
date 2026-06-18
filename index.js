@@ -211,26 +211,25 @@ app.post('/api/bots/add', (req, res) => {
     }
 });
 
-app.post('/api/bots/batch-add', async (req, res) => {
+app.post('/api/bots/batch-add', (req, res) => {
     const { accounts } = req.body;
-    if (!accounts || !Array.isArray(accounts)) {
-        return res.status(400).send({ status: 'error', message: 'Invalid payload.' });
+    
+    if (!accounts || !Array.isArray(accounts) || accounts.length === 0) {
+        return res.status(400).send({ error: 'ERR: INVALID_OR_EMPTY_BATCH' });
     }
 
-    res.send({ status: 'success', message: `BATCH_SEQ_STARTED (${accounts.length})` });
-    sendLog(`[SYS] Initiating batch login for ${accounts.length} units. Delay: 5s per unit.`);
-
-    for (let i = 0; i < accounts.length; i++) {
-        const acc = accounts[i];
-        if (acc.username && acc.password) {
-            initBot(acc.username, acc.password);
-            
-            if (i < accounts.length - 1) {
-                await new Promise(resolve => setTimeout(resolve, 5000));
-            }
+    let addedCount = 0;
+    
+    accounts.forEach(acc => {
+        const username = acc.username.toLowerCase();
+        // Prevent duplicates and start the bot
+        if (!bots[username]) {
+            createBot(username, acc.password);
+            addedCount++;
         }
-    }
-    sendLog(`[SYS] Batch login sequence finished.`);
+    });
+
+    res.status(200).send({ message: `BATCH_INIT: ${addedCount} NODES QUEUED` });
 });
 
 app.post('/api/bots/disconnect', (req, res) => {
