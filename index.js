@@ -140,22 +140,28 @@ function manageAttackInterval(botId, delaySeconds, action) {
         if (attackIntervals[botId]) return { status: 'error', message: 'Already attacking.' };
         attackConfigs[botId] = { active: true, delay: delaySeconds };
         
-        sendLog(`Starting static blind attack loop for ${username} (${delaySeconds}s)`);
+        // Exact armor stand coordinates parsed from your logs
+        const Vec3 = require('vec3');
+        const standPos = new Vec3(-44598.5, 154.0, -43672.5);
+        
+        sendLog(`Starting zero-movement sweep loop for ${username}`);
+        
+        // Snaps look vector to the armor stand's chest once to satisfy anti-cheat line-of-sight checks
+        bot.lookAt(standPos.offset(0, 1, 0), true); 
+
         const intervalId = setInterval(() => {
             const activeBot = bots[botId];
             if (activeBot && activeBot.entity) {
-                // Force completely static ground state
+                // Strict ground restrictions to block crits
                 activeBot.setControlState('sprint', false);
                 activeBot.setControlState('jump', false);
 
-                // Find the nearest armor stand within 4 blocks
                 const target = activeBot.nearestEntity(entity => {
                     return entity.name === 'armor_stand' &&
                            entity.position.distanceTo(activeBot.entity.position) < 4;
                 });
 
                 if (target) {
-                    // Force attack packet without changing yaw/pitch rotations
                     activeBot.attack(target); 
                 } else {
                     activeBot.swingArm('right');
