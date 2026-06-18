@@ -11,6 +11,7 @@ const attackIntervals = {};
 const attackConfigs = {}; 
 const survivalIntervals = {}; 
 const reconnectTimeouts = {}; 
+const potionIntervals = {}; 
 const clients = []; 
 
 function sendLog(msg) {
@@ -34,6 +35,23 @@ app.get('/api/bots', (req, res) => {
     const allKnownBots = [...new Set([...active, ...pending])];
     res.send(allKnownBots);
 });
+
+async function drinkOminousPotion(bot) {
+    const potion = bot.inventory.items().find(i => i.name === 'ominous_bottle' || i.name.includes('potion'));
+    
+    if (!potion) {
+        sendLog(`${bot.originalName} lacks the ominous potion.`);
+        return;
+    }
+
+    try {
+        await bot.equip(potion, 'hand');
+        await bot.consume();
+        sendLog(`${bot.originalName} drank the ominous potion.`);
+    } catch (err) {
+        sendLog(`[ERR] ${bot.originalName} failed to drink: ${err.message}`);
+    }
+}
 
 function initBot(username, password) {
     const botId = username.toLowerCase();
@@ -70,6 +88,10 @@ function initBot(username, password) {
                         sendLog(`${username} auto-executed /survival (10m loop).`);
                     }
                 }, 600000);
+                
+                potionIntervals[botId] = setInterval(() => {
+                    if (bots[botId]) drinkOminousPotion(bots[botId]);
+                }, 2400000);
                 
                 if (attackConfigs[botId] && attackConfigs[botId].active) {
                     sendLog(`Resuming attack loop for ${username}...`);
@@ -119,6 +141,10 @@ function cleanupBotState(botId) {
         clearInterval(survivalIntervals[botId]);
         delete survivalIntervals[botId];
     }
+    if (potionIntervals[botId]) {
+        clearInterval(potionIntervals[botId]);
+        delete potionIntervals[botId];
+    }
 }
 
 function handleConnectionLoss(username, password, botId) {
@@ -145,18 +171,15 @@ function manageAttackInterval(botId, delaySeconds, action) {
         const intervalId = setInterval(() => {
             const activeBot = bots[botId];
             if (activeBot && activeBot.entity) {
-                // Keep bot grounded to prevent crit modification
                 activeBot.setControlState('sprint', false);
                 activeBot.setControlState('jump', false);
 
-                // Find the nearest armor stand within 4 blocks
                 const target = activeBot.nearestEntity(entity => {
                     return entity.name === 'armor_stand' &&
                            entity.position.distanceTo(activeBot.entity.position) < 4;
                 });
 
                 if (target) {
-                    // Attack packet sent directly with zero head turning
                     activeBot.attack(target); 
                 } else {
                     activeBot.swingArm('right');
@@ -192,7 +215,6 @@ app.post('/api/bots/add', (req, res) => {
     }
 });
 
-// NEW: Batch add endpoint with 5-second staggered login
 app.post('/api/bots/batch-add', async (req, res) => {
     const { accounts } = req.body;
     if (!accounts || !Array.isArray(accounts)) {
@@ -207,7 +229,6 @@ app.post('/api/bots/batch-add', async (req, res) => {
         if (acc.username && acc.password) {
             initBot(acc.username, acc.password);
             
-            // Wait 5 seconds before starting the next bot, unless it's the last one
             if (i < accounts.length - 1) {
                 await new Promise(resolve => setTimeout(resolve, 5000));
             }
@@ -300,6 +321,15 @@ app.post('/api/bots/drop', async (req, res) => {
             sendLog(`[ERR] Drop failed: ${err.message}`);
         }
     }
+});
+
+app.post('/api/bots/potion', (req, res) => {
+    const botId = req.body.username.toLowerCase();
+    const bot = bots[botId];
+    if (!bot) return res.status(404).send({ error: 'Bot offline.' });
+
+    res.send({ status: 'success', message: 'CONSUMING_POTION' });
+    drinkOminousPotion(bot);
 });
 
 app.post('/api/bots/attack/start', (req, res) => {
