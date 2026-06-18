@@ -149,28 +149,31 @@ function manageAttackInterval(botId, delaySeconds, action) {
         // Snaps look vector to the armor stand's chest once to satisfy anti-cheat line-of-sight checks
         bot.lookAt(standPos.offset(0, 1, 0), true); 
 
-        const intervalId = setInterval(() => {
-            const activeBot = bots[botId];
-            if (activeBot && activeBot.entity) {
-                // Strict ground restrictions to block crits
-                activeBot.setControlState('sprint', false);
-                activeBot.setControlState('jump', false);
+const intervalId = setInterval(() => {
+    const activeBot = bots[botId];
+    if (activeBot && activeBot.entity) {
+        // Prevent crits/sprinting
+        activeBot.setControlState('sprint', false);
+        activeBot.setControlState('jump', false);
 
-                const target = activeBot.nearestEntity(entity => {
-                    return entity.name === 'armor_stand' &&
-                           entity.position.distanceTo(activeBot.entity.position) < 4;
-                });
+        // Find the stand safely
+        const target = activeBot.nearestEntity(entity => {
+            return entity.name && entity.name.toLowerCase().includes('stand') &&
+                   entity.position.distanceTo(activeBot.entity.position) < 4;
+        });
 
-                if (target) {
-                    activeBot.attack(target); 
-                } else {
-                    activeBot.swingArm('right');
-                }
-            } else {
-                clearInterval(intervalId);
-                delete attackIntervals[botId];
-            }
-        }, delaySeconds * 1000);
+        if (target) {
+            // Force lock the camera angle right before hitting so the server registers the sweep
+            activeBot.lookAt(target.position.offset(0, 1, 0), true); 
+            activeBot.attack(target); 
+        } else {
+            activeBot.swingArm('right');
+        }
+    } else {
+        clearInterval(intervalId);
+        delete attackIntervals[botId];
+    }
+}, delaySeconds * 1000);
         
         attackIntervals[botId] = intervalId;
         return { status: 'success', message: 'Attack started.' };
