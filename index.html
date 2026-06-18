@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
  <html lang="en">
    <head>
      <meta charset="UTF-8">
@@ -387,10 +387,9 @@
          const lastCtrlVal = ctrlSelect.value;
          const lastChatVal = chatSelect.value;
          ctrlSelect.innerHTML = '';
-         chatSelect.innerHTML = ' < option value = "all" > BROADCAST_TO_ALL_NODES < /option>';
+         chatSelect.innerHTML = '<option value="all">BROADCAST_TO_ALL_NODES</option>';
          if (bots.length === 0) {
-           ctrlSelect.innerHTML = ' < option value = ""
-           disabled selected > AWAITING_CONNECTION... < /option>';
+           ctrlSelect.innerHTML = '<option value="" disabled selected>AWAITING_CONNECTION...</option>';
            return;
          }
          bots.forEach(b => {
@@ -498,10 +497,10 @@
            return;
          }
          if (data.length === 0) {
-           invContainer.innerHTML = ' < div style = "text-align: center; opacity: 0.5;" > [CARGO_HOLD_EMPTY] < /div>';
+           invContainer.innerHTML = '<div style="text-align: center; opacity: 0.5;">[CARGO_HOLD_EMPTY]</div>';
            return;
          }
-         let html = ' < ul > ';
+         let html = '<ul>';
          data.forEach(item => {
            const countStr = String(item.count).padStart(3, '0');
            html += `
@@ -510,7 +509,7 @@
 														<span>[x${countStr}]</span>
 													</li>`;
          });
-         html += ' < /ul>';
+         html += '</ul>';
          invContainer.innerHTML = html;
        }
      </script>
