@@ -34,13 +34,19 @@ function getViewDirection(pitch, yaw) {
 }
 
 function getFacedBlock(bot, maxDistance) {
-	const entity = bot.entity;
-	if (!entity || entity.position == null || entity.height == null || entity.pitch == null || entity.yaw == null) {
-		return null;
-	}
-	const eyePosition = entity.position.offset(0, entity.height, 0);
-	const viewDirection = getViewDirection(entity.pitch, entity.yaw);
-	return bot.world.raycast(eyePosition, viewDirection, maxDistance);
+    const entity = bot.entity;
+    if (!entity || entity.position == null || entity.height == null || entity.pitch == null || entity.yaw == null) {
+        return null;
+    }
+    const eyePosition = entity.position.offset(0, entity.height, 0);
+    const viewDirection = getViewDirection(entity.pitch, entity.yaw);
+    
+    // Get the raycast intersection
+    const match = bot.world.raycast(eyePosition, viewDirection, maxDistance);
+    if (!match) return null;
+    
+    // Fetch and return the actual Block object
+    return bot.blockAt(match.position);
 }
 
 function sendLog(msg) {
