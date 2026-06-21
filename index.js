@@ -11,6 +11,8 @@ const survivalIntervals = {};
 const reconnectTimeouts = {};
 const potionIntervals = {};
 const potionConfigs = {};
+const mineIntervals = {};
+const mineConfigs = {};
 const clients = [];
 
 const HONEY_BOTTLE_INTERVAL_MS = 39 * 60 * 1000; // 39 minutes
@@ -74,6 +76,11 @@ function initBot(username, password) {
 					delete potionIntervals[botId];
 					managePotionInterval(botId, 'start');
 				}
+				if (mineConfigs[botId] && mineConfigs[botId].active) {
+					sendLog(`Resuming mine loop for ${username}...`);
+					delete mineIntervals[botId];
+					manageMineInterval(botId, 'start');
+				}
 			}, 3000);
 		}, 1000);
 	});
@@ -113,6 +120,10 @@ function cleanupBotState(botId) {
 	if (potionIntervals[botId]) {
 		clearInterval(potionIntervals[botId]);
 		delete potionIntervals[botId];
+	}
+	if (mineIntervals[botId]) {
+		clearInterval(mineIntervals[botId]);
+		delete mineIntervals[botId];
 	}
 }
 
@@ -256,6 +267,77 @@ function managePotionInterval(botId, action) {
 		return {
 			status: 'success',
 			message: 'Potion loop stopped.'
+		};
+	}
+	return {
+		status: 'error',
+		message: 'Invalid action.'
+	};
+}
+function manageMineInterval(botId, action) {
+	const bot = bots[botId];
+	if (!bot) return {
+		status: 'error',
+		message: 'Bot offline.'
+	};
+	const username = bot.originalName;
+	if (action === 'start') {
+		if (mineIntervals[botId]) return {
+			status: 'error',
+			message: 'Already mining.'
+		};
+		mineConfigs[botId] = {
+			active: true
+		};
+		sendLog(`Starting continuous mine loop for ${username} (holding LMB).`);
+		const intervalId = setInterval(() => {
+			const activeBot = bots[botId];
+			if (!activeBot || !activeBot.entity) {
+				clearInterval(intervalId);
+				delete mineIntervals[botId];
+				return;
+			}
+			// If a dig is already in progress, let it finish before starting another.
+			if (activeBot.targetDigBlock) return;
+			let block;
+			try {
+				block = activeBot.blockAtCursor(4.5);
+			} catch (err) {
+				block = null;
+			}
+			if (block && block.diggable) {
+				// forceLook: false keeps the head still, consistent with the
+				// zero-rotation approach used by the attack loop.
+				activeBot.dig(block, false).catch(err => {
+					if (err && err.message && !/dig_again|aborted|changed/i.test(err.message)) {
+						sendLog(`[ERR] ${activeBot.originalName} mine error: ${err.message}`);
+					}
+				});
+			}
+		}, 250);
+		mineIntervals[botId] = intervalId;
+		return {
+			status: 'success',
+			message: 'Mining started.'
+		};
+	}
+	if (action === 'stop') {
+		if (!mineIntervals[botId]) return {
+			status: 'error',
+			message: 'Not mining.'
+		};
+		if (mineConfigs[botId]) mineConfigs[botId].active = false;
+		clearInterval(mineIntervals[botId]);
+		delete mineIntervals[botId];
+		if (bot.stopDigging) {
+			try {
+				bot.stopDigging();
+			} catch (err) {}
+		}
+		sendLog(`Stopped mine loop for ${username}.`);
+		return {
+			status: 'success',
+			message: 'Mining stopped.'
 		};
 	}
 	return {
@@ -426,6 +508,14 @@ app.post('/api/bots/potion/start', (req, res) => {
 });
 app.post('/api/bots/potion/stop', (req, res) => {
 	const response = managePotionInterval(req.body.username.toLowerCase(), 'stop');
+	res.status(response.status === 'success' ? 200 : 400).send(response);
+});
+app.post('/api/bots/mine/start', (req, res) => {
+	const response = manageMineInterval(req.body.username.toLowerCase(), 'start');
+	res.status(response.status === 'success' ? 200 : 400).send(response);
+});
+app.post('/api/bots/mine/stop', (req, res) => {
+	const response = manageMineInterval(req.body.username.toLowerCase(), 'stop');
 	res.status(response.status === 'success' ? 200 : 400).send(response);
 });
 app.listen(process.env.PORT || 3000);
