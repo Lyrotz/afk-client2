@@ -164,7 +164,6 @@ function handleConnectionLoss(username, password, botId) {
 	}, 30000);
 }
 
-// ─── SINGLE manageMineInterval ────────────────────────────────────────────────
 function manageMineInterval(botId, action) {
     const bot = bots[botId];
     if (!bot) return { status: 'error', message: 'Bot offline.' };
@@ -180,65 +179,21 @@ function manageMineInterval(botId, action) {
             const activeBot = bots[botId];
             if (!activeBot || !activeBot.entity || activeBot.isMining) return;
 
-            const result = getFacedBlockAndFace(activeBot, 4.0);
-            if (!result) return;
+            const block = activeBot.findBlock({
+                matching: (b) => b && b.diggable && !['air', 'water', 'lava'].includes(b.name),
+                maxDistance: 4
+            });
 
-            const { block } = result;
-            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
-
-            activeBot.isMining = true;
-            const blockPos = block.position.clone();
-            const origType = block.type;
-
-            try {
-          function manageMineInterval(botId, action) {
-    const bot = bots[botId];
-    if (!bot) return { status: 'error', message: 'Bot offline.' };
-    const username = bot.originalName;
-
-    if (action === 'start') {
-        if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
-        mineConfigs[botId] = { active: true };
-        bot.isMining = false;
-        sendLog(`Starting mine loop for ${username}.`);
-
-        const intervalId = setInterval(async () => {
-            const activeBot = bots[botId];
-            if (!activeBot || !activeBot.entity || activeBot.isMining) return;
-
-            const result = getFacedBlockAndFace(activeBot, 4.0);
-            if (!result) return;
-
-            const { block } = result;
-            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
+            if (!block) return;
 
             activeBot.isMining = true;
-            const blockPos = block.position.clone();
-            const origType = block.type;
 
             try {
-                sendLog(`[MINE] Digging ${block.name} at ${blockPos}`);
-
-                // bot.dig(block, true) handles everything mineflayer-internally:
-                // - 1.19 sequence numbers (this is why raw packets were silently ignored)
-                // - arm animation packets
-                // - correct dig timing including enchantments
-                // - looking at the block
-                await activeBot.dig(block, true);
-
-                // Wait a couple ticks then verify server-side
-                await activeBot.waitForTicks(3);
-                const after = activeBot.blockAt(blockPos);
-                if (after && after.type === origType) {
-                    sendLog(`[MINE] ✗ Block unchanged — protected region`);
-                } else {
-                    sendLog(`[MINE] ✓ Broke: ${block.name}`);
-                }
-
+                sendLog(`[MINE] Digging ${block.name} at ${block.position}`);
+                await activeBot.dig(block, false);
+                sendLog(`[MINE] ✓ Broke: ${block.name}`);
             } catch (err) {
-                if (!err.message?.includes('aborted') && !err.message?.includes('Digging')) {
-                    sendLog(`[MINE] Error: ${err.message}`);
-                }
+                sendLog(`[MINE] Error: ${err.message}`);
             } finally {
                 activeBot.isMining = false;
             }
@@ -261,6 +216,20 @@ function manageMineInterval(botId, action) {
 
     return { status: 'error', message: 'Invalid action.' };
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 function findHoneyBottle(bot) {
 	return bot.inventory.items().find(item => item.name === 'honey_bottle');
 }
