@@ -171,51 +171,58 @@ function handleConnectionLoss(username, password, botId) {
 function manageMineInterval(botId, action) {
     const bot = bots[botId];
     if (!bot) return { status: 'error', message: 'Bot offline.' };
+    const username = bot.originalName;
 
     if (action === 'start') {
         if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
         mineConfigs[botId] = { active: true };
         bot.isMining = false;
+        sendLog(`Starting continuous mine loop for ${username}.`);
 
-mineIntervals[botId] = setInterval(async () => {
-    if (!bots[botId] || bot.targetDigBlock || bot.isMining) return;
+        const intervalId = setInterval(async () => {
+            const activeBot = bots[botId];
+            if (!activeBot || !activeBot.entity || activeBot.isMining) return;
 
-    // Modified to only find obsidian
-    const block = bot.findBlock({
-        matching: (b) => b && b.name === 'obsidian',
-        maxDistance: 4
-    });
+            // Use the fixed getFacedBlock instead of the buggy blockAtCursor
+            const block = getFacedBlock(activeBot, 4.0);
 
-    if (block) {
-        bot.isMining = true;
-        try {
-            // Equip pickaxe before mining to prevent server rejection
-            const pickaxe = bot.inventory.items().find(i => i.name.includes('pickaxe'));
-            if (pickaxe) await bot.equip(pickaxe, 'hand');
+            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) {
+                return;
+            }
 
-            await bot.dig(block, false);
-        } catch (err) {
-            // Ignore standard mineflayer abort errors
-        } finally {
-            bot.isMining = false;
-        }
-    } else {
-        bot.swingArm('right');
-    }
-}, 250);
+            sendLog(`[MINE] Digging: ${block.name} at ${block.position}`);
+            activeBot.isMining = true;
 
+            try {
+                const pickaxe = activeBot.inventory.items().find(i => i.name.includes('pickaxe'));
+                if (pickaxe) await activeBot.equip(pickaxe, 'hand');
+
+                await activeBot.dig(block, false); // false = don't interrupt self
+                sendLog(`[MINE] Broke: ${block.name}`);
+            } catch (err) {
+                // Dig aborts are normal (block already gone, etc.)
+            } finally {
+                activeBot.isMining = false;
+            }
+        }, 250);
+
+        mineIntervals[botId] = intervalId;
         return { status: 'success', message: 'Mining started.' };
     }
 
     if (action === 'stop') {
+        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
+        if (mineConfigs[botId]) mineConfigs[botId].active = false;
         clearInterval(mineIntervals[botId]);
         delete mineIntervals[botId];
-        bot.isMining = false;
         try { bot.stopDigging(); } catch (err) {}
+        bot.isMining = false;
+        sendLog(`Stopped mine loop for ${username}.`);
         return { status: 'success', message: 'Mining stopped.' };
     }
-}
 
+    return { status: 'error', message: 'Invalid action.' };
+}
 function findHoneyBottle(bot) {
 	// honey_bottle is a stable vanilla item id, so an exact match is reliable
 	// (no need to guess at custom display names).
