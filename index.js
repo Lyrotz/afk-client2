@@ -191,6 +191,32 @@ function manageMineInterval(botId, action) {
             const origType = block.type;
 
             try {
+          function manageMineInterval(botId, action) {
+    const bot = bots[botId];
+    if (!bot) return { status: 'error', message: 'Bot offline.' };
+    const username = bot.originalName;
+
+    if (action === 'start') {
+        if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
+        mineConfigs[botId] = { active: true };
+        bot.isMining = false;
+        sendLog(`Starting mine loop for ${username}.`);
+
+        const intervalId = setInterval(async () => {
+            const activeBot = bots[botId];
+            if (!activeBot || !activeBot.entity || activeBot.isMining) return;
+
+            const result = getFacedBlockAndFace(activeBot, 4.0);
+            if (!result) return;
+
+            const { block } = result;
+            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
+
+            activeBot.isMining = true;
+            const blockPos = block.position.clone();
+            const origType = block.type;
+
+            try {
                 sendLog(`[MINE] Digging ${block.name} at ${blockPos}`);
 
                 // bot.dig(block, true) handles everything mineflayer-internally:
@@ -219,8 +245,22 @@ function manageMineInterval(botId, action) {
         }, 500);
 
         mineIntervals[botId] = intervalId;
-// ─────────────────────────────────────────────────────────────────────────────
+        return { status: 'success', message: 'Mining started.' };
+    }
 
+    if (action === 'stop') {
+        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
+        if (mineConfigs[botId]) mineConfigs[botId].active = false;
+        clearInterval(mineIntervals[botId]);
+        delete mineIntervals[botId];
+        try { bot.stopDigging(); } catch (e) {}
+        bot.isMining = false;
+        sendLog(`Stopped mine loop for ${username}.`);
+        return { status: 'success', message: 'Mining stopped.' };
+    }
+
+    return { status: 'error', message: 'Invalid action.' };
+}
 function findHoneyBottle(bot) {
 	return bot.inventory.items().find(item => item.name === 'honey_bottle');
 }
