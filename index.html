@@ -312,6 +312,10 @@
         <div class="row">
           <button onclick="startPotionLoop()" style="width: 100%; color: #ffc233;">DRINK_HONEY_BOTTLE (39M LOOP)</button>
         </div>
+        <div class="row">
+          <button onclick="mine('start')" style="flex: 1; color: #33ccff;">INIT_MINE</button>
+          <button onclick="mine('stop')" style="flex: 1; color: #33ccff;">HALT_MINE</button>
+        </div>
          <div class="row">
            <span>INV.SLOT:</span>
            <select id="hotbar-slot" class="short-input">
@@ -465,6 +469,13 @@
        function startPotionLoop() {
          const bot = document.getElementById('bot-select').value;
          if (bot) req('/api/bots/potion/start', {
+           username: bot
+         });
+       }
+
+       function mine(state) {
+         const bot = document.getElementById('bot-select').value;
+         if (bot) req(`/api/bots/mine/${state}`, {
            username: bot
          });
        }
