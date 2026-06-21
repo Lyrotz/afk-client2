@@ -16,7 +16,7 @@ const mineIntervals = {};
 const mineConfigs = {};
 const clients = [];
 
-const HONEY_BOTTLE_INTERVAL_MS = 39 * 60 * 1000; // 39 minutes
+const HONEY_BOTTLE_INTERVAL_MS = 39 * 60 * 1000;
 
 function getViewDirection(pitch, yaw) {
 	const csPitch = Math.cos(pitch);
@@ -26,20 +26,33 @@ function getViewDirection(pitch, yaw) {
 	return new Vec3(-snYaw * csPitch, snPitch, -csYaw * csPitch);
 }
 
-function getFacedBlock(bot, maxDistance) {
-    const entity = bot.entity;
-    if (!entity || entity.position == null || entity.height == null || entity.pitch == null || entity.yaw == null) {
-        return null;
-    }
-    const eyePosition = entity.position.offset(0, entity.height, 0);
-    const viewDirection = getViewDirection(entity.pitch, entity.yaw);
-    
-    // Get the raycast intersection
-    const match = bot.world.raycast(eyePosition, viewDirection, maxDistance);
-    if (!match) return null;
-    
-    // Fetch and return the actual Block object
-    return bot.blockAt(match.position);
+// Returns { block, face } or null. Face is the Minecraft protocol face number (0-5).
+function getFacedBlockAndFace(bot, maxDistance) {
+	const entity = bot.entity;
+	if (!entity || entity.position == null || entity.height == null ||
+		entity.pitch == null || entity.yaw == null) return null;
+
+	const eyePosition = entity.position.offset(0, entity.height, 0);
+	const viewDirection = getViewDirection(entity.pitch, entity.yaw);
+	const match = bot.world.raycast(eyePosition, viewDirection, maxDistance);
+	if (!match) return null;
+
+	const block = bot.blockAt(match.position);
+	if (!block) return null;
+
+	// Convert face Vec3 → Minecraft protocol face number
+	let face = 1; // default: top
+	const f = match.face;
+	if (f) {
+		if      (f.y === -1) face = 0; // bottom
+		else if (f.y ===  1) face = 1; // top
+		else if (f.z === -1) face = 2; // north
+		else if (f.z ===  1) face = 3; // south
+		else if (f.x === -1) face = 4; // west
+		else if (f.x ===  1) face = 5; // east
+	}
+
+	return { block, face };
 }
 
 function sendLog(msg) {
@@ -47,6 +60,7 @@ function sendLog(msg) {
 	console.log(logEntry);
 	clients.forEach(client => client.write(`data: ${logEntry}\n\n`));
 }
+
 app.get('/api/stream', (req, res) => {
 	res.setHeader('Content-Type', 'text/event-stream');
 	res.setHeader('Cache-Control', 'no-cache');
@@ -55,6 +69,7 @@ app.get('/api/stream', (req, res) => {
 	clients.push(res);
 	req.on('close', () => clients.splice(clients.indexOf(res), 1));
 });
+
 app.get('/api/bots', (req, res) => {
 	const active = Object.values(bots).map(b => b.originalName);
 	const pending = Object.keys(reconnectTimeouts).map(id => id.toUpperCase());
@@ -134,22 +149,10 @@ function initBot(username, password) {
 
 function cleanupBotState(botId) {
 	delete bots[botId];
-	if (attackIntervals[botId]) {
-		clearInterval(attackIntervals[botId]);
-		delete attackIntervals[botId];
-	}
-	if (survivalIntervals[botId]) {
-		clearInterval(survivalIntervals[botId]);
-		delete survivalIntervals[botId];
-	}
-	if (potionIntervals[botId]) {
-		clearInterval(potionIntervals[botId]);
-		delete potionIntervals[botId];
-	}
-	if (mineIntervals[botId]) {
-		clearInterval(mineIntervals[botId]);
-		delete mineIntervals[botId];
-	}
+	if (attackIntervals[botId]) { clearInterval(attackIntervals[botId]); delete attackIntervals[botId]; }
+	if (survivalIntervals[botId]) { clearInterval(survivalIntervals[botId]); delete survivalIntervals[botId]; }
+	if (potionIntervals[botId]) { clearInterval(potionIntervals[botId]); delete potionIntervals[botId]; }
+	if (mineIntervals[botId]) { clearInterval(mineIntervals[botId]); delete mineIntervals[botId]; }
 }
 
 function handleConnectionLoss(username, password, botId) {
@@ -161,70 +164,106 @@ function handleConnectionLoss(username, password, botId) {
 	}, 30000);
 }
 
+// ─── SINGLE manageMineInterval ────────────────────────────────────────────────
 function manageMineInterval(botId, action) {
-    const bot = bots[botId];
-    if (!bot) return { status: 'error', message: 'Bot offline.' };
-    const username = bot.originalName;
+	const bot = bots[botId];
+	if (!bot) return { status: 'error', message: 'Bot offline.' };
+	const username = bot.originalName;
 
-    if (action === 'start') {
-        if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
-        mineConfigs[botId] = { active: true };
-        sendLog(`Starting continuous mine loop for ${username} (holding LMB).`);
-        
-        bot.isMining = false; // Custom lock to prevent packet spam
+	if (action === 'start') {
+		if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
+		mineConfigs[botId] = { active: true };
+		bot.isMining = false;
+		sendLog(`Starting mine loop for ${username}.`);
 
-        const intervalId = setInterval(async () => {
-    const activeBot = bots[botId];
-    if (!activeBot || !activeBot.entity || activeBot.targetDigBlock || activeBot.isMining) return;
+		const intervalId = setInterval(async () => {
+			const activeBot = bots[botId];
+			if (!activeBot || !activeBot.entity || activeBot.isMining) return;
 
-    // Bypass the Mineflayer pitch/yaw === 0 bug
-    if (activeBot.entity.pitch === 0) activeBot.entity.pitch = 0.00001;
-    if (activeBot.entity.yaw === 0) activeBot.entity.yaw = 0.00001;
+			const result = getFacedBlockAndFace(activeBot, 4.0);
+			if (!result) return;
 
-    const block = activeBot.blockAtCursor(4.0);
+			const { block, face } = result;
+			if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
 
-    if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) {
-        return;
-    }
+			activeBot.isMining = true;
+			const blockPos = block.position.clone();
 
-    sendLog(`[DEBUG] Attempting to mine: ${block.name} at ${block.position}`);
-    activeBot.isMining = true;
+			try {
+				// Force the bot to look at the block so the server agrees on facing
+				await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
+				await activeBot.waitForTicks(2);
 
-    try {
-        await activeBot.dig(block, true);
-        sendLog(`[DEBUG] Successfully: ${block.name}`);
-    } catch (err) {
-        sendLog(`[DEBUG] Failed to mine ${block.name}: ${err.message}`);
-    } finally {
-        activeBot.isMining = false;
-    }
-}, 250);
+				// Start digging — with the correct face
+				activeBot._client.write('block_dig', { status: 0, location: blockPos, face });
 
-        mineIntervals[botId] = intervalId;
-        return { status: 'success', message: 'Mining started.' };
-    }
+				// Wait the real break time. Enforce 300ms floor for anti-cheat.
+				const rawDigTime = block.digTime(activeBot.heldItem?.type ?? -1, false, false, false, [], []);
+				const digTime = Math.max(rawDigTime, 300);
+				sendLog(`[MINE] Digging ${block.name} face=${face} for ${digTime}ms...`);
+				await new Promise(resolve => setTimeout(resolve, digTime));
 
-    if (action === 'stop') {
-        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
-        if (mineConfigs[botId]) mineConfigs[botId].active = false;
-        clearInterval(mineIntervals[botId]);
-        delete mineIntervals[botId];
-        
-        if (bot.stopDigging) {
-            try {
-                bot.stopDigging();
-            } catch (err) {}
-        }
-        bot.isMining = false;
-        sendLog(`Stopped mine loop for ${username}.`);
-        return { status: 'success', message: 'Mining stopped.' };
-    }
+				// Finish digging — same face
+				activeBot._client.write('block_dig', { status: 2, location: blockPos, face });
 
-    return { status: 'error', message: 'Invalid action.' };
+				// Wait for the server's block_change packet to confirm success or rejection.
+				// The client removes the block locally immediately — that means nothing.
+				// Only the server's response tells us if it actually broke.
+				const broken = await new Promise((resolve) => {
+					let done = false;
+					const finish = (ok) => {
+						if (done) return;
+						done = true;
+						clearTimeout(timer);
+						activeBot._client.removeListener('block_change', onBlockChange);
+						resolve(ok);
+					};
+					// If the server sends nothing within 800ms assume it worked
+					const timer = setTimeout(() => finish(true), 800);
+					const onBlockChange = (packet) => {
+						const p = packet.location;
+						if (p.x === blockPos.x && p.y === blockPos.y && p.z === blockPos.z) {
+							// type 0 = air = block actually broke
+							// any other type = server restored the block (anti-cheat / protection)
+							finish(packet.type === 0);
+						}
+					};
+					activeBot._client.on('block_change', onBlockChange);
+				});
+
+				if (broken) {
+					sendLog(`[MINE] ✓ Broke: ${block.name} at ${blockPos}`);
+				} else {
+					sendLog(`[MINE] ✗ Server rejected ${block.name} — protected region or anti-cheat`);
+				}
+
+			} catch (err) {
+				sendLog(`[MINE] Error: ${err.message}`);
+			} finally {
+				activeBot.isMining = false;
+			}
+		}, 600);
+
+		mineIntervals[botId] = intervalId;
+		return { status: 'success', message: 'Mining started.' };
+	}
+
+	if (action === 'stop') {
+		if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
+		if (mineConfigs[botId]) mineConfigs[botId].active = false;
+		clearInterval(mineIntervals[botId]);
+		delete mineIntervals[botId];
+		try { bot.stopDigging(); } catch (e) {}
+		bot.isMining = false;
+		sendLog(`Stopped mine loop for ${username}.`);
+		return { status: 'success', message: 'Mining stopped.' };
+	}
+
+	return { status: 'error', message: 'Invalid action.' };
 }
+// ─────────────────────────────────────────────────────────────────────────────
+
 function findHoneyBottle(bot) {
-	// honey_bottle is a stable vanilla item id, so an exact match is reliable
-	// (no need to guess at custom display names).
 	return bot.inventory.items().find(item => item.name === 'honey_bottle');
 }
 
@@ -248,19 +287,11 @@ async function drinkHoneyBottle(botId) {
 
 function managePotionInterval(botId, action) {
 	const bot = bots[botId];
-	if (!bot) return {
-		status: 'error',
-		message: 'Bot offline.'
-	};
+	if (!bot) return { status: 'error', message: 'Bot offline.' };
 	const username = bot.originalName;
 	if (action === 'start') {
-		if (potionIntervals[botId]) return {
-			status: 'error',
-			message: 'Already running.'
-		};
-		potionConfigs[botId] = {
-			active: true
-		};
+		if (potionIntervals[botId]) return { status: 'error', message: 'Already running.' };
+		potionConfigs[botId] = { active: true };
 		sendLog(`Starting Honey Bottle loop for ${username} (every 39m).`);
 		drinkHoneyBottle(botId);
 		const intervalId = setInterval(() => {
@@ -272,69 +303,39 @@ function managePotionInterval(botId, action) {
 			}
 		}, HONEY_BOTTLE_INTERVAL_MS);
 		potionIntervals[botId] = intervalId;
-		return {
-			status: 'success',
-			message: 'Potion loop started.'
-		};
+		return { status: 'success', message: 'Potion loop started.' };
 	}
 	if (action === 'stop') {
-		if (!potionIntervals[botId]) return {
-			status: 'error',
-			message: 'Not running.'
-		};
+		if (!potionIntervals[botId]) return { status: 'error', message: 'Not running.' };
 		if (potionConfigs[botId]) potionConfigs[botId].active = false;
 		clearInterval(potionIntervals[botId]);
 		delete potionIntervals[botId];
 		sendLog(`Stopped Honey Bottle loop for ${username}.`);
-		return {
-			status: 'success',
-			message: 'Potion loop stopped.'
-		};
+		return { status: 'success', message: 'Potion loop stopped.' };
 	}
-	return {
-		status: 'error',
-		message: 'Invalid action.'
-	};
+	return { status: 'error', message: 'Invalid action.' };
 }
 
 app.post('/api/bots/add', (req, res) => {
-	const {
-		username,
-		password
-	} = req.body;
+	const { username, password } = req.body;
 	if (initBot(username, password)) {
-		res.send({
-			status: 'success',
-			message: `${username} initiated.`
-		});
+		res.send({ status: 'success', message: `${username} initiated.` });
 	} else {
-		res.status(400).send({
-			status: 'error',
-			message: `Bot active.`
-		});
+		res.status(400).send({ status: 'error', message: `Bot active.` });
 	}
 });
-// NEW: Batch add endpoint with 5-second staggered login
+
 app.post('/api/bots/batch-add', async (req, res) => {
-	const {
-		accounts
-	} = req.body;
+	const { accounts } = req.body;
 	if (!accounts || !Array.isArray(accounts)) {
-		return res.status(400).send({
-			status: 'error',
-			message: 'Invalid payload.'
-		});
+		return res.status(400).send({ status: 'error', message: 'Invalid payload.' });
 	}
-	res.send({
-		status: 'success',
-		message: `BATCH_SEQ_STARTED (${accounts.length})`
-	});
+	res.send({ status: 'success', message: `BATCH_SEQ_STARTED (${accounts.length})` });
 	sendLog(`[SYS] Initiating batch login for ${accounts.length} units. Delay: 5s per unit.`);
 	for (let i = 0; i < accounts.length; i++) {
 		const acc = accounts[i];
 		if (acc.username && acc.password) {
 			initBot(acc.username, acc.password);
-			// Wait 5 seconds before starting the next bot, unless it's the last one
 			if (i < accounts.length - 1) {
 				await new Promise(resolve => setTimeout(resolve, 5000));
 			}
@@ -342,6 +343,7 @@ app.post('/api/bots/batch-add', async (req, res) => {
 	}
 	sendLog(`[SYS] Batch login sequence finished.`);
 });
+
 app.post('/api/bots/disconnect', (req, res) => {
 	const botId = req.body.username.toLowerCase();
 	let actionTaken = false;
@@ -351,30 +353,18 @@ app.post('/api/bots/disconnect', (req, res) => {
 		sendLog(`[SYS] Cancelled pending reconnection for ${botId}`);
 		actionTaken = true;
 	}
-	if (attackConfigs[botId]) {
-		attackConfigs[botId].active = false;
-	}
-	if (bots[botId]) {
-		bots[botId].quit();
-		actionTaken = true;
-	}
+	if (attackConfigs[botId]) attackConfigs[botId].active = false;
+	if (bots[botId]) { bots[botId].quit(); actionTaken = true; }
 	if (actionTaken) {
-		res.send({
-			status: 'success',
-			message: `KILLED_PROCESS: ${botId}`
-		});
+		res.send({ status: 'success', message: `KILLED_PROCESS: ${botId}` });
 	} else {
-		res.status(404).send({
-			status: 'error',
-			message: 'NO_PROCESS_FOUND'
-		});
+		res.status(404).send({ status: 'error', message: 'NO_PROCESS_FOUND' });
 	}
 });
+
 app.post('/api/bots/chat', (req, res) => {
 	const target = req.body.target.toLowerCase();
-	const {
-		message
-	} = req.body;
+	const { message } = req.body;
 	if (target === 'all') {
 		Object.values(bots).forEach(b => b.chat(message));
 		sendLog(`[OUTGOING BROADCAST]: ${message}`);
@@ -382,59 +372,36 @@ app.post('/api/bots/chat', (req, res) => {
 		bots[target].chat(message);
 		sendLog(`[OUTGOING] ${bots[target].originalName}: ${message}`);
 	} else {
-		return res.status(404).send({
-			status: 'error',
-			message: 'Target offline.'
-		});
+		return res.status(404).send({ status: 'error', message: 'Target offline.' });
 	}
-	res.send({
-		status: 'success',
-		message: 'Message sent.'
-	});
+	res.send({ status: 'success', message: 'Message sent.' });
 });
+
 app.post('/api/bots/hotbar', (req, res) => {
 	const botId = req.body.username.toLowerCase();
 	const bot = bots[botId];
-	if (!bot) return res.status(404).send({
-		error: 'Bot offline'
-	});
+	if (!bot) return res.status(404).send({ error: 'Bot offline' });
 	const slotInt = parseInt(req.body.slot);
-	if (isNaN(slotInt) || slotInt < 0 || slotInt > 8) return res.status(400).send({
-		error: 'Invalid slot'
-	});
+	if (isNaN(slotInt) || slotInt < 0 || slotInt > 8) return res.status(400).send({ error: 'Invalid slot' });
 	bot.setQuickBarSlot(slotInt);
 	sendLog(`${bot.originalName} changed hotbar to ${slotInt}`);
-	res.send({
-		status: 'success',
-		message: `Slot set`
-	});
+	res.send({ status: 'success', message: `Slot set` });
 });
+
 app.get('/api/bots/:username/inventory', (req, res) => {
 	const botId = req.params.username.toLowerCase();
 	const bot = bots[botId];
-	if (!bot) return res.status(404).send({
-		error: 'Bot offline'
-	});
-	res.send(bot.inventory.items().map(item => ({
-		name: item.name,
-		count: item.count
-	})));
+	if (!bot) return res.status(404).send({ error: 'Bot offline' });
+	res.send(bot.inventory.items().map(item => ({ name: item.name, count: item.count })));
 });
+
 app.post('/api/bots/drop', async (req, res) => {
 	const botId = req.body.username.toLowerCase();
 	const bot = bots[botId];
-	if (!bot) return res.status(404).send({
-		error: 'Bot offline.'
-	});
+	if (!bot) return res.status(404).send({ error: 'Bot offline.' });
 	const items = bot.inventory.items();
-	if (items.length === 0) return res.send({
-		status: 'success',
-		message: 'EMPTY'
-	});
-	res.send({
-		status: 'success',
-		message: 'DROPPING'
-	});
+	if (items.length === 0) return res.send({ status: 'success', message: 'EMPTY' });
+	res.send({ status: 'success', message: 'DROPPING' });
 	sendLog(`${bot.originalName} jettisoning...`);
 	await bot.waitForTicks(10);
 	for (const item of items) {
@@ -446,6 +413,7 @@ app.post('/api/bots/drop', async (req, res) => {
 		}
 	}
 });
+
 app.post('/api/bots/attack/start', (req, res) => {
 	const response = manageAttackInterval(req.body.username.toLowerCase(), req.body.delay, 'start');
 	res.status(response.status === 'success' ? 200 : 400).send(response);
@@ -470,4 +438,5 @@ app.post('/api/bots/mine/stop', (req, res) => {
 	const response = manageMineInterval(req.body.username.toLowerCase(), 'stop');
 	res.status(response.status === 'success' ? 200 : 400).send(response);
 });
+
 app.listen(process.env.PORT || 3000);
