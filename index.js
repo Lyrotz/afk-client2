@@ -179,8 +179,9 @@ function manageMineInterval(botId, action) {
             const activeBot = bots[botId];
             if (!activeBot || !activeBot.entity || activeBot.isMining) return;
 
+            // Updated to target only obsidian. findBlock returns the closest by default.
             const block = activeBot.findBlock({
-                matching: (b) => b && b.diggable && !['air', 'water', 'lava'].includes(b.name),
+                matching: (b) => b && b.name === 'obsidian',
                 maxDistance: 4
             });
 
@@ -216,7 +217,6 @@ function manageMineInterval(botId, action) {
 
     return { status: 'error', message: 'Invalid action.' };
 }
-
 
 
 
