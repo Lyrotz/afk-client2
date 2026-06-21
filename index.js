@@ -301,18 +301,27 @@ function manageMineInterval(botId, action) {
 			if (activeBot.targetDigBlock) return;
 			let block;
 			try {
-				block = activeBot.blockAtCursor(4.5);
+				// findBlock searches by proximity, not by where the bot is currently
+				// looking, so it doesn't depend on the bot already facing a target.
+				// bot.dig() will turn the bot to face whatever block we hand it.
+				block = activeBot.findBlock({
+					matching: b => b && b.diggable && b.boundingBox === 'block' && b.name !== 'air',
+					maxDistance: 4,
+					count: 1
+				});
 			} catch (err) {
 				block = null;
 			}
-			if (block && block.diggable) {
-				// forceLook: false keeps the head still, consistent with the
-				// zero-rotation approach used by the attack loop.
+			if (block) {
+				// forceLook: false makes the turn gradual/human-like instead of an
+				// instant snap, then mines the block once the bot is facing it.
 				activeBot.dig(block, false).catch(err => {
 					if (err && err.message && !/dig_again|aborted|changed/i.test(err.message)) {
 						sendLog(`[ERR] ${activeBot.originalName} mine error: ${err.message}`);
 					}
 				});
+			} else {
+				activeBot.swingArm('right');
 			}
 		}, 250);
 		mineIntervals[botId] = intervalId;
