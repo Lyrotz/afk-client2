@@ -183,41 +183,69 @@ function manageMineInterval(botId, action) {
             const blockPos = block.position.clone();
 
             try {
-                // Look at block and wait for packet to reach server
+                // Look at block and wait for the server to receive the look update
                 await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
                 await activeBot.waitForTicks(3);
 
-                // Send start digging packet manually
+                // Send start digging
                 activeBot._client.write('block_dig', {
                     status: 0,
                     location: blockPos,
                     face: 1
                 });
 
-                // Wait the real dig time so anti-cheat doesn't reject it
-                const digTime = block.digTime(
+                // Calculate dig time — enforce 300ms minimum so anti-cheat doesn't flag it
+                const rawDigTime = block.digTime(
                     activeBot.heldItem?.type ?? -1,
                     false, false, false, [], []
                 );
-                sendLog(`[MINE] Digging ${block.name} (${digTime}ms)...`);
-                await new Promise(resolve => setTimeout(resolve, digTime + 50));
+                const digTime = Math.max(rawDigTime, 300);
+                sendLog(`[MINE] Digging ${block.name} for ${digTime}ms...`);
+                await new Promise(resolve => setTimeout(resolve, digTime));
 
-                // Send finish digging packet manually
+                // Send finish digging
                 activeBot._client.write('block_dig', {
                     status: 2,
                     location: blockPos,
                     face: 1
                 });
 
-                await activeBot.waitForTicks(2);
+                // Listen for the server's actual response instead of checking client-side
+                // The client removes the block locally instantly — that's meaningless.
+                // What matters is whether the server sends back air (success) or the
+                // original block (anti-cheat rollback).
+                const broken = await new Promise((resolve) => {
+                    let done = false;
 
-                // Verify server actually broke the block
-                const blockAfter = activeBot.blockAt(blockPos);
-                if (blockAfter && blockAfter.name === block.name) {
-                    sendLog(`[MINE] Anti-cheat rejected dig on ${block.name}`);
+                    const finish = (result) => {
+                        if (done) return;
+                        done = true;
+                        clearTimeout(timer);
+                        activeBot._client.removeListener('block_change', onBlockChange);
+                        resolve(result);
+                    };
+
+                    // Fallback timeout — if no block_change arrives, assume it worked
+                    const timer = setTimeout(() => finish(true), 800);
+
+                    const onBlockChange = (packet) => {
+                        const p = packet.location;
+                        if (p.x === blockPos.x && p.y === blockPos.y && p.z === blockPos.z) {
+                            // Server sent back the original block = anti-cheat rollback
+                            // Server sent back air (type 0) = actually broken
+                            finish(packet.type === 0);
+                        }
+                    };
+
+                    activeBot._client.on('block_change', onBlockChange);
+                });
+
+                if (broken) {
+                    sendLog(`[MINE] ✓ Broke: ${block.name} at ${blockPos}`);
                 } else {
-                    sendLog(`[MINE] Broke: ${block.name} at ${blockPos}`);
+                    sendLog(`[MINE] ✗ Anti-cheat rejected ${block.name} — try increasing digTime buffer`);
                 }
+
             } catch (err) {
                 sendLog(`[MINE] Error: ${err.message}`);
             } finally {
