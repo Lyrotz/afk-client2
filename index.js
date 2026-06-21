@@ -319,42 +319,31 @@ function manageMineInterval(botId, action) {
         bot.isMining = false; // Custom lock to prevent packet spam
 
         const intervalId = setInterval(async () => {
-            const activeBot = bots[botId];
-            if (!activeBot || !activeBot.entity) {
-                clearInterval(intervalId);
-                delete mineIntervals[botId];
-                return;
-            }
+    const activeBot = bots[botId];
+    if (!activeBot || !activeBot.entity || activeBot.targetDigBlock || activeBot.isMining) return;
 
-            // Check custom lock AND mineflayer's internal lock
-            if (activeBot.targetDigBlock || activeBot.isMining) return;
+    // Bypass the Mineflayer pitch/yaw === 0 bug
+    if (activeBot.entity.pitch === 0) activeBot.entity.pitch = 0.00001;
+    if (activeBot.entity.yaw === 0) activeBot.entity.yaw = 0.00001;
 
-            let block;
-            try {
-                // Reduced reach to 4.0 for anti-cheat compliance
-                block = getFacedBlock(activeBot, 4.0);
-            } catch (err) {
-                block = null;
-            }
+    const block = activeBot.blockAtCursor(4.0);
 
-            // Explicitly ignore air and water
-            if (block && block.name !== 'air' && block.name !== 'water' && block.diggable) {
-                activeBot.isMining = true; 
-                try {
-                    // Explicitly look at the center of the block first
-                    await activeBot.lookAt(block.position.offset(0.5, 0.5, 0.5), true);
-                    await activeBot.dig(block, true);
-                } catch (err) {
-                    if (err && err.message && !/dig_again|aborted|changed/i.test(err.message)) {
-                        sendLog(`[ERR] ${activeBot.originalName} mine error: ${err.message}`);
-                    }
-                } finally {
-                    activeBot.isMining = false; 
-                }
-            } else {
-                activeBot.swingArm('right');
-            }
-        }, 250);
+    if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) {
+        return;
+    }
+
+    sendLog(`[DEBUG] Attempting to mine: ${block.name} at ${block.position}`);
+    activeBot.isMining = true;
+
+    try {
+        await activeBot.dig(block, true);
+        sendLog(`[DEBUG] Successfully mined: ${block.name}`);
+    } catch (err) {
+        sendLog(`[DEBUG] Failed to mine ${block.name}: ${err.message}`);
+    } finally {
+        activeBot.isMining = false;
+    }
+}, 250);
 
         mineIntervals[botId] = intervalId;
         return { status: 'success', message: 'Mining started.' };
