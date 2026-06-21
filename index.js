@@ -179,39 +179,52 @@ function manageMineInterval(botId, action) {
         bot.isMining = false;
         sendLog(`Starting mine loop for ${username}.`);
 
-        const intervalId = setInterval(async () => {
-            const activeBot = bots[botId];
-            if (!activeBot || !activeBot.entity || activeBot.isMining) return;
+const intervalId = setInterval(async () => {
+    const activeBot = bots[botId];
+    if (!activeBot || !activeBot.entity || activeBot.isMining) return;
 
-            const block = getFacedBlock(activeBot, 4.0);
-            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
+    const block = getFacedBlock(activeBot, 4.0);
+    if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
 
-            activeBot.isMining = true;
-            const blockPos = block.position.clone();
+    activeBot.isMining = true;
+    const blockPos = block.position.clone();
 
-            try {
-                // Force the bot to actually look at the block center first
-                await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
+    try {
+        // Look at block and wait a tick for the packet to send
+        await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
+        await activeBot.waitForTicks(3); // let the server register the look
 
-                const pickaxe = activeBot.inventory.items().find(i => i.name.includes('pickaxe'));
-                if (pickaxe) await activeBot.equip(pickaxe, 'hand');
+        // Manually send dig start + dig finish like a real client would
+        activeBot._client.write('block_dig', {
+            status: 0, // start digging
+            location: blockPos,
+            face: 1
+        });
 
-                await activeBot.dig(block, false);
+        // Wait the actual hardness-based break time
+        const digTime = block.digTime(activeBot.heldItem?.type ?? -1, false, false, false, [], []);
+        await new Promise(resolve => setTimeout(resolve, digTime + 50)); // +50ms buffer
 
-                // Verify the block was actually broken server-side
-                await activeBot.waitForTicks(2);
-                const blockAfter = activeBot.blockAt(blockPos);
-                if (blockAfter && blockAfter.name === block.name) {
-                    sendLog(`[MINE] Server rejected dig on ${block.name} (anti-cheat?)`);
-                } else {
-                    sendLog(`[MINE] Broke: ${block.name} at ${blockPos}`);
-                }
-            } catch (err) {
-                // Abort errors are normal
-            } finally {
-                activeBot.isMining = false;
-            }
-        }, 300);
+        activeBot._client.write('block_dig', {
+            status: 2, // finish digging
+            location: blockPos,
+            face: 1
+        });
+
+        await activeBot.waitForTicks(2);
+
+        const blockAfter = activeBot.blockAt(blockPos);
+        if (blockAfter && blockAfter.name === block.name) {
+            sendLog(`[MINE] Anti-cheat rejected dig on ${block.name}`);
+        } else {
+            sendLog(`[MINE] Broke: ${block.name} at ${blockPos}`);
+        }
+    } catch (err) {
+        sendLog(`[MINE] Error: ${err.message}`);
+    } finally {
+        activeBot.isMining = false;
+    }
+}, 500);
 
         mineIntervals[botId] = intervalId;
         return { status: 'success', message: 'Mining started.' };
