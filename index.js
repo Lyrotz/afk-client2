@@ -1,6 +1,7 @@
 const express = require('express');
 const mineflayer = require('mineflayer');
 const path = require('path');
+const { Vec3 } = require('vec3');
 const app = express();
 app.use(express.json());
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
@@ -16,6 +17,31 @@ const mineConfigs = {};
 const clients = [];
 
 const HONEY_BOTTLE_INTERVAL_MS = 39 * 60 * 1000; // 39 minutes
+
+// mineflayer's own bot.blockAtCursor()/blockAtEntityCursor() bails out (returns
+// null) whenever entity.pitch or entity.yaw is *exactly* 0, because it checks
+// them with a falsy "!entity.pitch" test instead of a proper null check (0 is
+// a perfectly valid look angle - dead level pitch, or facing straight along an
+// axis - and both are common). That bug means the bot would never find a block
+// it's facing if its pitch/yaw happened to be 0. This re-implements the same
+// raycast manually with a correct null/undefined check.
+function getViewDirection(pitch, yaw) {
+	const csPitch = Math.cos(pitch);
+	const snPitch = Math.sin(pitch);
+	const csYaw = Math.cos(yaw);
+	const snYaw = Math.sin(yaw);
+	return new Vec3(-snYaw * csPitch, snPitch, -csYaw * csPitch);
+}
+
+function getFacedBlock(bot, maxDistance) {
+	const entity = bot.entity;
+	if (!entity || entity.position == null || entity.height == null || entity.pitch == null || entity.yaw == null) {
+		return null;
+	}
+	const eyePosition = entity.position.offset(0, entity.height, 0);
+	const viewDirection = getViewDirection(entity.pitch, entity.yaw);
+	return bot.world.raycast(eyePosition, viewDirection, maxDistance);
+}
 
 function sendLog(msg) {
 	const logEntry = `[${new Date().toLocaleTimeString()}] ${msg}`;
@@ -301,9 +327,11 @@ function manageMineInterval(botId, action) {
 			if (activeBot.targetDigBlock) return;
 			let block;
 			try {
-				// blockAtCursor raycasts using the bot's current look direction,
-				// so it only ever targets whatever the bot is already facing.
-				block = activeBot.blockAtCursor(4.5);
+				// getFacedBlock raycasts using the bot's current look direction
+				// (see comment at the top of the file for why we don't use
+				// mineflayer's own blockAtCursor here), so it only ever targets
+				// whatever the bot is already facing.
+				block = getFacedBlock(activeBot, 4.5);
 			} catch (err) {
 				block = null;
 			}
