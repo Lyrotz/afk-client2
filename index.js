@@ -165,60 +165,70 @@ function handleConnectionLoss(username, password, botId) {
 }
 
 function manageMineInterval(botId, action) {
-    const bot = bots[botId];
-    if (!bot) return { status: 'error', message: 'Bot offline.' };
-    const username = bot.originalName;
-
-    if (action === 'start') {
-        if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
-        mineConfigs[botId] = { active: true };
-        bot.isMining = false;
-        sendLog(`Starting mine loop for ${username}.`);
-
-        const intervalId = setInterval(async () => {
-            const activeBot = bots[botId];
-            if (!activeBot || !activeBot.entity || activeBot.isMining) return;
-
-            // Updated to target only obsidian. findBlock returns the closest by default.
-            const block = activeBot.findBlock({
-                maxDistance: 4
-            });
-
-            if (!block) return;
-
-            activeBot.isMining = true;
-
-            try {
-                sendLog(`[MINE] Digging ${block.name} at ${block.position}`);
-                await activeBot.dig(block, false);
-                sendLog(`[MINE] ✓ Broke: ${block.name}`);
-            } catch (err) {
-                sendLog(`[MINE] Error: ${err.message}`);
-            } finally {
-                activeBot.isMining = false;
-            }
-        }, 500);
-
-        mineIntervals[botId] = intervalId;
-        return { status: 'success', message: 'Mining started.' };
-    }
-
-    if (action === 'stop') {
-        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
-        if (mineConfigs[botId]) mineConfigs[botId].active = false;
-        clearInterval(mineIntervals[botId]);
-        delete mineIntervals[botId];
-        try { bot.stopDigging(); } catch (e) {}
-        bot.isMining = false;
-        sendLog(`Stopped mine loop for ${username}.`);
-        return { status: 'success', message: 'Mining stopped.' };
-    }
-
-    return { status: 'error', message: 'Invalid action.' };
+	const bot = bots[botId];
+	if (!bot) return {
+		status: 'error',
+		message: 'Bot offline.'
+	};
+	const username = bot.originalName;
+	if (action === 'start') {
+		if (mineIntervals[botId]) return {
+			status: 'error',
+			message: 'Already mining.'
+		};
+		mineConfigs[botId] = {
+			active: true
+		};
+		bot.isMining = false;
+		sendLog(`Starting mine loop for ${username}.`);
+		const intervalId = setInterval(async () => {
+			const activeBot = bots[botId];
+			if (!activeBot || !activeBot.entity || activeBot.isMining) return;
+			const block = activeBot.findBlock({
+			    matching: (b) => b && b.name === 'obsidian',
+			    maxDistance: 4
+			});
+			if (!block) return;
+			activeBot.isMining = true;
+			try {
+				sendLog(`[MINE] Digging ${block.name} at ${block.position}`);
+				await activeBot.dig(block, false);
+				sendLog(`[MINE] ✓ Broke: ${block.name}`);
+			} catch (err) {
+				sendLog(`[MINE] Error: ${err.message}`);
+			} finally {
+				activeBot.isMining = false;
+			}
+		}, 500);
+		mineIntervals[botId] = intervalId;
+		return {
+			status: 'success',
+			message: 'Mining started.'
+		};
+	}
+	if (action === 'stop') {
+		if (!mineIntervals[botId]) return {
+			status: 'error',
+			message: 'Not mining.'
+		};
+		if (mineConfigs[botId]) mineConfigs[botId].active = false;
+		clearInterval(mineIntervals[botId]);
+		delete mineIntervals[botId];
+		try {
+			bot.stopDigging();
+		} catch (e) {}
+		bot.isMining = false;
+		sendLog(`Stopped mine loop for ${username}.`);
+		return {
+			status: 'success',
+			message: 'Mining stopped.'
+		};
+	}
+	return {
+		status: 'error',
+		message: 'Invalid action.'
+	};
 }
-
-
-
 
 
 
