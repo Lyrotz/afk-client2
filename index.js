@@ -186,7 +186,7 @@ function manageMineInterval(botId, action) {
 			if (!activeBot || !activeBot.entity || activeBot.isMining) return;
              const block = activeBot.findBlock({
 
-                matching: (b) => b && b.diggable && !['air', 'water', 'lava'].includes(b.name),
+                matching: (b) => b && b.diggable && ['obsidian'].includes(b.name),
 
                 maxDistance: 4
 
