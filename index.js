@@ -177,39 +177,59 @@ function manageMineInterval(botId, action) {
         if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
         mineConfigs[botId] = { active: true };
         bot.isMining = false;
-        sendLog(`Starting continuous mine loop for ${username}.`);
+        sendLog(`Starting mine loop for ${username}.`);
 
         const intervalId = setInterval(async () => {
             const activeBot = bots[botId];
             if (!activeBot || !activeBot.entity || activeBot.isMining) return;
 
-            // Use the fixed getFacedBlock instead of the buggy blockAtCursor
             const block = getFacedBlock(activeBot, 4.0);
+            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
 
-            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) {
-                return;
-            }
-
-            sendLog(`[MINE] Digging: ${block.name} at ${block.position}`);
             activeBot.isMining = true;
+            const blockPos = block.position.clone();
 
             try {
+                // Force the bot to actually look at the block center first
+                await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
+
                 const pickaxe = activeBot.inventory.items().find(i => i.name.includes('pickaxe'));
                 if (pickaxe) await activeBot.equip(pickaxe, 'hand');
 
-                await activeBot.dig(block, false); // false = don't interrupt self
-                sendLog(`[MINE] Broke: ${block.name}`);
+                await activeBot.dig(block, false);
+
+                // Verify the block was actually broken server-side
+                await activeBot.waitForTicks(2);
+                const blockAfter = activeBot.blockAt(blockPos);
+                if (blockAfter && blockAfter.name === block.name) {
+                    sendLog(`[MINE] Server rejected dig on ${block.name} (anti-cheat?)`);
+                } else {
+                    sendLog(`[MINE] Broke: ${block.name} at ${blockPos}`);
+                }
             } catch (err) {
-                // Dig aborts are normal (block already gone, etc.)
+                // Abort errors are normal
             } finally {
                 activeBot.isMining = false;
             }
-        }, 250);
+        }, 300);
 
         mineIntervals[botId] = intervalId;
         return { status: 'success', message: 'Mining started.' };
     }
 
+    if (action === 'stop') {
+        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
+        if (mineConfigs[botId]) mineConfigs[botId].active = false;
+        clearInterval(mineIntervals[botId]);
+        delete mineIntervals[botId];
+        try { bot.stopDigging(); } catch (err) {}
+        bot.isMining = false;
+        sendLog(`Stopped mine loop for ${username}.`);
+        return { status: 'success', message: 'Mining stopped.' };
+    }
+
+    return { status: 'error', message: 'Invalid action.' };
+}
     if (action === 'stop') {
         if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
         if (mineConfigs[botId]) mineConfigs[botId].active = false;
