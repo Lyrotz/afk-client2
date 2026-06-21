@@ -18,13 +18,6 @@ const clients = [];
 
 const HONEY_BOTTLE_INTERVAL_MS = 39 * 60 * 1000; // 39 minutes
 
-// mineflayer's own bot.blockAtCursor()/blockAtEntityCursor() bails out (returns
-// null) whenever entity.pitch or entity.yaw is *exactly* 0, because it checks
-// them with a falsy "!entity.pitch" test instead of a proper null check (0 is
-// a perfectly valid look angle - dead level pitch, or facing straight along an
-// axis - and both are common). That bug means the bot would never find a block
-// it's facing if its pitch/yaw happened to be 0. This re-implements the same
-// raycast manually with a correct null/undefined check.
 function getViewDirection(pitch, yaw) {
 	const csPitch = Math.cos(pitch);
 	const snPitch = Math.sin(pitch);
@@ -179,70 +172,63 @@ function manageMineInterval(botId, action) {
         bot.isMining = false;
         sendLog(`Starting mine loop for ${username}.`);
 
-const intervalId = setInterval(async () => {
-    const activeBot = bots[botId];
-    if (!activeBot || !activeBot.entity || activeBot.isMining) return;
+        const intervalId = setInterval(async () => {
+            const activeBot = bots[botId];
+            if (!activeBot || !activeBot.entity || activeBot.isMining) return;
 
-    const block = getFacedBlock(activeBot, 4.0);
-    if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
+            const block = getFacedBlock(activeBot, 4.0);
+            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
 
-    activeBot.isMining = true;
-    const blockPos = block.position.clone();
+            activeBot.isMining = true;
+            const blockPos = block.position.clone();
 
-    try {
-        // Look at block and wait a tick for the packet to send
-        await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
-        await activeBot.waitForTicks(3); // let the server register the look
+            try {
+                // Look at block and wait for packet to reach server
+                await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
+                await activeBot.waitForTicks(3);
 
-        // Manually send dig start + dig finish like a real client would
-        activeBot._client.write('block_dig', {
-            status: 0, // start digging
-            location: blockPos,
-            face: 1
-        });
+                // Send start digging packet manually
+                activeBot._client.write('block_dig', {
+                    status: 0,
+                    location: blockPos,
+                    face: 1
+                });
 
-        // Wait the actual hardness-based break time
-        const digTime = block.digTime(activeBot.heldItem?.type ?? -1, false, false, false, [], []);
-        await new Promise(resolve => setTimeout(resolve, digTime + 50)); // +50ms buffer
+                // Wait the real dig time so anti-cheat doesn't reject it
+                const digTime = block.digTime(
+                    activeBot.heldItem?.type ?? -1,
+                    false, false, false, [], []
+                );
+                sendLog(`[MINE] Digging ${block.name} (${digTime}ms)...`);
+                await new Promise(resolve => setTimeout(resolve, digTime + 50));
 
-        activeBot._client.write('block_dig', {
-            status: 2, // finish digging
-            location: blockPos,
-            face: 1
-        });
+                // Send finish digging packet manually
+                activeBot._client.write('block_dig', {
+                    status: 2,
+                    location: blockPos,
+                    face: 1
+                });
 
-        await activeBot.waitForTicks(2);
+                await activeBot.waitForTicks(2);
 
-        const blockAfter = activeBot.blockAt(blockPos);
-        if (blockAfter && blockAfter.name === block.name) {
-            sendLog(`[MINE] Anti-cheat rejected dig on ${block.name}`);
-        } else {
-            sendLog(`[MINE] Broke: ${block.name} at ${blockPos}`);
-        }
-    } catch (err) {
-        sendLog(`[MINE] Error: ${err.message}`);
-    } finally {
-        activeBot.isMining = false;
-    }
-}, 500);
+                // Verify server actually broke the block
+                const blockAfter = activeBot.blockAt(blockPos);
+                if (blockAfter && blockAfter.name === block.name) {
+                    sendLog(`[MINE] Anti-cheat rejected dig on ${block.name}`);
+                } else {
+                    sendLog(`[MINE] Broke: ${block.name} at ${blockPos}`);
+                }
+            } catch (err) {
+                sendLog(`[MINE] Error: ${err.message}`);
+            } finally {
+                activeBot.isMining = false;
+            }
+        }, 500);
 
         mineIntervals[botId] = intervalId;
         return { status: 'success', message: 'Mining started.' };
     }
 
-    if (action === 'stop') {
-        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
-        if (mineConfigs[botId]) mineConfigs[botId].active = false;
-        clearInterval(mineIntervals[botId]);
-        delete mineIntervals[botId];
-        try { bot.stopDigging(); } catch (err) {}
-        bot.isMining = false;
-        sendLog(`Stopped mine loop for ${username}.`);
-        return { status: 'success', message: 'Mining stopped.' };
-    }
-
-    return { status: 'error', message: 'Invalid action.' };
-}
     if (action === 'stop') {
         if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
         if (mineConfigs[botId]) mineConfigs[botId].active = false;
