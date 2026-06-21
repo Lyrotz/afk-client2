@@ -321,7 +321,7 @@ function manageMineInterval(botId, action) {
 
     try {
         await activeBot.dig(block, true);
-        sendLog(`[DEBUG] Successfully mined: ${block.name}`);
+        sendLog(`[DEBUG] Successfully: ${block.name}`);
     } catch (err) {
         sendLog(`[DEBUG] Failed to mine ${block.name}: ${err.message}`);
     } finally {
