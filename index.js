@@ -169,89 +169,36 @@ function manageMineInterval(botId, action) {
     if (action === 'start') {
         if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
         mineConfigs[botId] = { active: true };
-        bot.isMining = false;
-        sendLog(`Starting mine loop for ${username}.`);
+        sendLog(`Starting continuous mine loop for ${username} (holding LMB).`);
+        
+        bot.isMining = false; // Custom lock to prevent packet spam
 
         const intervalId = setInterval(async () => {
-            const activeBot = bots[botId];
-            if (!activeBot || !activeBot.entity || activeBot.isMining) return;
+    const activeBot = bots[botId];
+    if (!activeBot || !activeBot.entity || activeBot.targetDigBlock || activeBot.isMining) return;
 
-            const block = getFacedBlock(activeBot, 4.0);
-            if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) return;
+    // Bypass the Mineflayer pitch/yaw === 0 bug
+    if (activeBot.entity.pitch === 0) activeBot.entity.pitch = 0.00001;
+    if (activeBot.entity.yaw === 0) activeBot.entity.yaw = 0.00001;
 
-            activeBot.isMining = true;
-            const blockPos = block.position.clone();
+    const block = activeBot.blockAtCursor(4.0);
 
-            try {
-                // Look at block and wait for the server to receive the look update
-                await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
-                await activeBot.waitForTicks(3);
+    if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) {
+        return;
+    }
 
-                // Send start digging
-                activeBot._client.write('block_dig', {
-                    status: 0,
-                    location: blockPos,
-                    face: 1
-                });
+    sendLog(`[DEBUG] Attempting to mine: ${block.name} at ${block.position}`);
+    activeBot.isMining = true;
 
-                // Calculate dig time — enforce 300ms minimum so anti-cheat doesn't flag it
-                const rawDigTime = block.digTime(
-                    activeBot.heldItem?.type ?? -1,
-                    false, false, false, [], []
-                );
-                const digTime = Math.max(rawDigTime, 300);
-                sendLog(`[MINE] Digging ${block.name} for ${digTime}ms...`);
-                await new Promise(resolve => setTimeout(resolve, digTime));
-
-                // Send finish digging
-                activeBot._client.write('block_dig', {
-                    status: 2,
-                    location: blockPos,
-                    face: 1
-                });
-
-                // Listen for the server's actual response instead of checking client-side
-                // The client removes the block locally instantly — that's meaningless.
-                // What matters is whether the server sends back air (success) or the
-                // original block (anti-cheat rollback).
-                const broken = await new Promise((resolve) => {
-                    let done = false;
-
-                    const finish = (result) => {
-                        if (done) return;
-                        done = true;
-                        clearTimeout(timer);
-                        activeBot._client.removeListener('block_change', onBlockChange);
-                        resolve(result);
-                    };
-
-                    // Fallback timeout — if no block_change arrives, assume it worked
-                    const timer = setTimeout(() => finish(true), 800);
-
-                    const onBlockChange = (packet) => {
-                        const p = packet.location;
-                        if (p.x === blockPos.x && p.y === blockPos.y && p.z === blockPos.z) {
-                            // Server sent back the original block = anti-cheat rollback
-                            // Server sent back air (type 0) = actually broken
-                            finish(packet.type === 0);
-                        }
-                    };
-
-                    activeBot._client.on('block_change', onBlockChange);
-                });
-
-                if (broken) {
-                    sendLog(`[MINE] ✓ Broke: ${block.name} at ${blockPos}`);
-                } else {
-                    sendLog(`[MINE] ✗ Anti-cheat rejected ${block.name} — try increasing digTime buffer`);
-                }
-
-            } catch (err) {
-                sendLog(`[MINE] Error: ${err.message}`);
-            } finally {
-                activeBot.isMining = false;
-            }
-        }, 500);
+    try {
+        await activeBot.dig(block, true);
+        sendLog(`[DEBUG] Successfully: ${block.name}`);
+    } catch (err) {
+        sendLog(`[DEBUG] Failed to mine ${block.name}: ${err.message}`);
+    } finally {
+        activeBot.isMining = false;
+    }
+}, 250);
 
         mineIntervals[botId] = intervalId;
         return { status: 'success', message: 'Mining started.' };
@@ -262,7 +209,12 @@ function manageMineInterval(botId, action) {
         if (mineConfigs[botId]) mineConfigs[botId].active = false;
         clearInterval(mineIntervals[botId]);
         delete mineIntervals[botId];
-        try { bot.stopDigging(); } catch (err) {}
+        
+        if (bot.stopDigging) {
+            try {
+                bot.stopDigging();
+            } catch (err) {}
+        }
         bot.isMining = false;
         sendLog(`Stopped mine loop for ${username}.`);
         return { status: 'success', message: 'Mining stopped.' };
@@ -344,67 +296,7 @@ function managePotionInterval(botId, action) {
 		message: 'Invalid action.'
 	};
 }
-function manageMineInterval(botId, action) {
-    const bot = bots[botId];
-    if (!bot) return { status: 'error', message: 'Bot offline.' };
-    const username = bot.originalName;
 
-    if (action === 'start') {
-        if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
-        mineConfigs[botId] = { active: true };
-        sendLog(`Starting continuous mine loop for ${username} (holding LMB).`);
-        
-        bot.isMining = false; // Custom lock to prevent packet spam
-
-        const intervalId = setInterval(async () => {
-    const activeBot = bots[botId];
-    if (!activeBot || !activeBot.entity || activeBot.targetDigBlock || activeBot.isMining) return;
-
-    // Bypass the Mineflayer pitch/yaw === 0 bug
-    if (activeBot.entity.pitch === 0) activeBot.entity.pitch = 0.00001;
-    if (activeBot.entity.yaw === 0) activeBot.entity.yaw = 0.00001;
-
-    const block = activeBot.blockAtCursor(4.0);
-
-    if (!block || ['air', 'water', 'lava'].includes(block.name) || !block.diggable) {
-        return;
-    }
-
-    sendLog(`[DEBUG] Attempting to mine: ${block.name} at ${block.position}`);
-    activeBot.isMining = true;
-
-    try {
-        await activeBot.dig(block, true);
-        sendLog(`[DEBUG] Successfully: ${block.name}`);
-    } catch (err) {
-        sendLog(`[DEBUG] Failed to mine ${block.name}: ${err.message}`);
-    } finally {
-        activeBot.isMining = false;
-    }
-}, 250);
-
-        mineIntervals[botId] = intervalId;
-        return { status: 'success', message: 'Mining started.' };
-    }
-
-    if (action === 'stop') {
-        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
-        if (mineConfigs[botId]) mineConfigs[botId].active = false;
-        clearInterval(mineIntervals[botId]);
-        delete mineIntervals[botId];
-        
-        if (bot.stopDigging) {
-            try {
-                bot.stopDigging();
-            } catch (err) {}
-        }
-        bot.isMining = false;
-        sendLog(`Stopped mine loop for ${username}.`);
-        return { status: 'success', message: 'Mining stopped.' };
-    }
-
-    return { status: 'error', message: 'Invalid action.' };
-}
 app.post('/api/bots/add', (req, res) => {
 	const {
 		username,
