@@ -307,82 +307,76 @@ function managePotionInterval(botId, action) {
 	};
 }
 function manageMineInterval(botId, action) {
-	const bot = bots[botId];
-	if (!bot) return {
-		status: 'error',
-		message: 'Bot offline.'
-	};
-	const username = bot.originalName;
-	if (action === 'start') {
-		if (mineIntervals[botId]) return {
-			status: 'error',
-			message: 'Already mining.'
-		};
-		mineConfigs[botId] = {
-			active: true
-		};
-		sendLog(`Starting continuous mine loop for ${username} (holding LMB).`);
-		const intervalId = setInterval(() => {
-			const activeBot = bots[botId];
-			if (!activeBot || !activeBot.entity) {
-				clearInterval(intervalId);
-				delete mineIntervals[botId];
-				return;
-			}
-			// If a dig is already in progress, let it finish before starting another.
-			if (activeBot.targetDigBlock) return;
-			let block;
-			try {
-				// getFacedBlock raycasts using the bot's current look direction
-				// (see comment at the top of the file for why we don't use
-				// mineflayer's own blockAtCursor here), so it only ever targets
-				// whatever the bot is already facing.
-				block = getFacedBlock(activeBot, 4.5);
-			} catch (err) {
-				block = null;
-			}
-			if (block && block.diggable) {
-				// forceLook: 'ignore' makes dig() skip its internal lookAt call
-				// entirely, so the bot's head doesn't move at all — it just mines
-				// whatever block it's already facing.
-				activeBot.dig(block, 'ignore').catch(err => {
-					if (err && err.message && !/dig_again|aborted|changed/i.test(err.message)) {
-						sendLog(`[ERR] ${activeBot.originalName} mine error: ${err.message}`);
-					}
-				});
-			} else {
-				activeBot.swingArm('right');
-			}
-		}, 250);
-		mineIntervals[botId] = intervalId;
-		return {
-			status: 'success',
-			message: 'Mining started.'
-		};
-	}
-	if (action === 'stop') {
-		if (!mineIntervals[botId]) return {
-			status: 'error',
-			message: 'Not mining.'
-		};
-		if (mineConfigs[botId]) mineConfigs[botId].active = false;
-		clearInterval(mineIntervals[botId]);
-		delete mineIntervals[botId];
-		if (bot.stopDigging) {
-			try {
-				bot.stopDigging();
-			} catch (err) {}
-		}
-		sendLog(`Stopped mine loop for ${username}.`);
-		return {
-			status: 'success',
-			message: 'Mining stopped.'
-		};
-	}
-	return {
-		status: 'error',
-		message: 'Invalid action.'
-	};
+    const bot = bots[botId];
+    if (!bot) return { status: 'error', message: 'Bot offline.' };
+    const username = bot.originalName;
+
+    if (action === 'start') {
+        if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
+        mineConfigs[botId] = { active: true };
+        sendLog(`Starting continuous mine loop for ${username} (holding LMB).`);
+        
+        bot.isMining = false; // Custom lock to prevent packet spam
+
+        const intervalId = setInterval(async () => {
+            const activeBot = bots[botId];
+            if (!activeBot || !activeBot.entity) {
+                clearInterval(intervalId);
+                delete mineIntervals[botId];
+                return;
+            }
+
+            // Check custom lock AND mineflayer's internal lock
+            if (activeBot.targetDigBlock || activeBot.isMining) return;
+
+            let block;
+            try {
+                // Reduced reach to 4.0 for anti-cheat compliance
+                block = getFacedBlock(activeBot, 4.0);
+            } catch (err) {
+                block = null;
+            }
+
+            // Explicitly ignore air and water
+            if (block && block.name !== 'air' && block.name !== 'water' && block.diggable) {
+                activeBot.isMining = true; 
+                try {
+                    // Explicitly look at the center of the block first
+                    await activeBot.lookAt(block.position.offset(0.5, 0.5, 0.5), true);
+                    await activeBot.dig(block, true);
+                } catch (err) {
+                    if (err && err.message && !/dig_again|aborted|changed/i.test(err.message)) {
+                        sendLog(`[ERR] ${activeBot.originalName} mine error: ${err.message}`);
+                    }
+                } finally {
+                    activeBot.isMining = false; 
+                }
+            } else {
+                activeBot.swingArm('right');
+            }
+        }, 250);
+
+        mineIntervals[botId] = intervalId;
+        return { status: 'success', message: 'Mining started.' };
+    }
+
+    if (action === 'stop') {
+        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
+        if (mineConfigs[botId]) mineConfigs[botId].active = false;
+        clearInterval(mineIntervals[botId]);
+        delete mineIntervals[botId];
+        
+        if (bot.stopDigging) {
+            try {
+                bot.stopDigging();
+            } catch (err) {}
+        }
+        bot.isMining = false;
+        sendLog(`Stopped mine loop for ${username}.`);
+        return { status: 'success', message: 'Mining stopped.' };
+    }
+
+    return { status: 'error', message: 'Invalid action.' };
 }
 app.post('/api/bots/add', (req, res) => {
 	const {
