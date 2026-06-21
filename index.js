@@ -301,21 +301,17 @@ function manageMineInterval(botId, action) {
 			if (activeBot.targetDigBlock) return;
 			let block;
 			try {
-				// findBlock searches by proximity, not by where the bot is currently
-				// looking, so it doesn't depend on the bot already facing a target.
-				// bot.dig() will turn the bot to face whatever block we hand it.
-				block = activeBot.findBlock({
-					matching: b => b && b.diggable && b.boundingBox === 'block' && b.name !== 'air',
-					maxDistance: 4,
-					count: 1
-				});
+				// blockAtCursor raycasts using the bot's current look direction,
+				// so it only ever targets whatever the bot is already facing.
+				block = activeBot.blockAtCursor(4.5);
 			} catch (err) {
 				block = null;
 			}
-			if (block) {
-				// forceLook: false makes the turn gradual/human-like instead of an
-				// instant snap, then mines the block once the bot is facing it.
-				activeBot.dig(block, false).catch(err => {
+			if (block && block.diggable) {
+				// forceLook: 'ignore' makes dig() skip its internal lookAt call
+				// entirely, so the bot's head doesn't move at all — it just mines
+				// whatever block it's already facing.
+				activeBot.dig(block, 'ignore').catch(err => {
 					if (err && err.message && !/dig_again|aborted|changed/i.test(err.message)) {
 						sendLog(`[ERR] ${activeBot.originalName} mine error: ${err.message}`);
 					}
