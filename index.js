@@ -168,68 +168,69 @@ function handleConnectionLoss(username, password, botId) {
 	}, 30000);
 }
 
-function manageAttackInterval(botId, delaySeconds, action) {
-	const bot = bots[botId];
-	if (!bot) return {
-		status: 'error',
-		message: 'Bot offline.'
-	};
-	const username = bot.originalName;
-	if (action === 'start') {
-		if (attackIntervals[botId]) return {
-			status: 'error',
-			message: 'Already attacking.'
-		};
-		attackConfigs[botId] = {
-			active: true,
-			delay: delaySeconds
-		};
-		sendLog(`Starting zero-rotation attack loop for ${username}`);
-		const intervalId = setInterval(() => {
-			const activeBot = bots[botId];
-			if (activeBot && activeBot.entity) {
-				// Keep bot grounded to prevent crit modification
-				activeBot.setControlState('sprint', false);
-				activeBot.setControlState('jump', false);
-				// Find the nearest armor stand within 4 blocks
-				const target = activeBot.nearestEntity(entity => {
-					return entity.name === 'armor_stand' && entity.position.distanceTo(activeBot.entity.position) < 4;
-				});
-				if (target) {
-					// Attack packet sent directly with zero head turning
-					activeBot.attack(target);
-				} else {
-					activeBot.swingArm('right');
-				}
-			} else {
-				clearInterval(intervalId);
-				delete attackIntervals[botId];
-			}
-		}, delaySeconds * 1000);
-		attackIntervals[botId] = intervalId;
-		return {
-			status: 'success',
-			message: 'Attack started.'
-		};
-	}
-	if (action === 'stop') {
-		if (!attackIntervals[botId]) return {
-			status: 'error',
-			message: 'Not attacking.'
-		};
-		if (attackConfigs[botId]) attackConfigs[botId].active = false;
-		clearInterval(attackIntervals[botId]);
-		delete attackIntervals[botId];
-		sendLog(`Stopped attack loop for ${username}.`);
-		return {
-			status: 'success',
-			message: 'Attack stopped.'
-		};
-	}
-	return {
-		status: 'error',
-		message: 'Invalid action.'
-	};
+function manageMineInterval(botId, action) {
+    const bot = bots[botId];
+    if (!bot) return { status: 'error', message: 'Bot offline.' };
+    const username = bot.originalName;
+
+    if (action === 'start') {
+        if (mineIntervals[botId]) return { status: 'error', message: 'Already mining.' };
+        mineConfigs[botId] = { active: true };
+        sendLog(`Starting line-of-sight mine loop for ${username}.`);
+        
+        bot.isMining = false; 
+
+        const intervalId = setInterval(async () => {
+            const activeBot = bots[botId];
+            if (!activeBot || !activeBot.entity) {
+                clearInterval(intervalId);
+                delete mineIntervals[botId];
+                return;
+            }
+
+            if (activeBot.targetDigBlock || activeBot.isMining) return;
+
+            // Prevent Mineflayer's null raycast bug
+            if (activeBot.entity.pitch === 0) activeBot.entity.pitch = 0.00001;
+            if (activeBot.entity.yaw === 0) activeBot.entity.yaw = 0.00001;
+
+            const block = activeBot.blockAtCursor(4.0);
+
+            if (block && block.diggable && !['air', 'water', 'lava'].includes(block.name)) {
+                activeBot.isMining = true; 
+                try {
+                    await activeBot.dig(block, true); 
+                } catch (err) {
+                    if (err && err.message && !/dig_again|aborted|changed/i.test(err.message)) {
+                        sendLog(`[ERR] ${activeBot.originalName} mine error: ${err.message}`);
+                    }
+                } finally {
+                    activeBot.isMining = false; 
+                }
+            } else {
+                activeBot.swingArm('right');
+            }
+        }, 250);
+
+        mineIntervals[botId] = intervalId;
+        return { status: 'success', message: 'Mining started.' };
+    }
+
+    if (action === 'stop') {
+        if (!mineIntervals[botId]) return { status: 'error', message: 'Not mining.' };
+        if (mineConfigs[botId]) mineConfigs[botId].active = false;
+        clearInterval(mineIntervals[botId]);
+        delete mineIntervals[botId];
+        
+        if (bot.stopDigging) {
+            try { bot.stopDigging(); } catch (err) {}
+        }
+        bot.isMining = false;
+        sendLog(`Stopped mine loop for ${username}.`);
+        return { status: 'success', message: 'Mining stopped.' };
+    }
+
+    return { status: 'error', message: 'Invalid action.' };
 }
 
 function findHoneyBottle(bot) {
