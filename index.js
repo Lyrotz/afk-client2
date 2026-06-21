@@ -181,7 +181,6 @@ function manageMineInterval(botId, action) {
 
             // Updated to target only obsidian. findBlock returns the closest by default.
             const block = activeBot.findBlock({
-                matching: (b) => b && b.name === 'obsidian',
                 maxDistance: 4
             });
 
