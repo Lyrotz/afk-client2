@@ -190,25 +190,32 @@ function manageMineInterval(botId, action) {
 			const blockPos = block.position.clone();
 
 			try {
-				// Force the bot to look at the block so the server agrees on facing
 				await activeBot.lookAt(blockPos.offset(0.5, 0.5, 0.5), true);
 				await activeBot.waitForTicks(2);
 
-				// Start digging — with the correct face
+				// Swing arm BEFORE starting dig — required by anti-cheat
+				activeBot.swingArm('right');
+
+				// Start digging
 				activeBot._client.write('block_dig', { status: 0, location: blockPos, face });
 
-				// Wait the real break time. Enforce 300ms floor for anti-cheat.
 				const rawDigTime = block.digTime(activeBot.heldItem?.type ?? -1, false, false, false, [], []);
 				const digTime = Math.max(rawDigTime, 300);
 				sendLog(`[MINE] Digging ${block.name} face=${face} for ${digTime}ms...`);
-				await new Promise(resolve => setTimeout(resolve, digTime));
 
-				// Finish digging — same face
+				// Keep swinging arm every 200ms during the entire dig — this is what a
+				// real client does and what anti-cheat checks for
+				const swingInterval = setInterval(() => {
+					if (bots[botId]) activeBot.swingArm('right');
+				}, 200);
+
+				await new Promise(resolve => setTimeout(resolve, digTime));
+				clearInterval(swingInterval);
+
+				// Finish digging
 				activeBot._client.write('block_dig', { status: 2, location: blockPos, face });
 
-				// Wait for the server's block_change packet to confirm success or rejection.
-				// The client removes the block locally immediately — that means nothing.
-				// Only the server's response tells us if it actually broke.
+				// Wait for server confirmation
 				const broken = await new Promise((resolve) => {
 					let done = false;
 					const finish = (ok) => {
@@ -218,13 +225,10 @@ function manageMineInterval(botId, action) {
 						activeBot._client.removeListener('block_change', onBlockChange);
 						resolve(ok);
 					};
-					// If the server sends nothing within 800ms assume it worked
 					const timer = setTimeout(() => finish(true), 800);
 					const onBlockChange = (packet) => {
 						const p = packet.location;
 						if (p.x === blockPos.x && p.y === blockPos.y && p.z === blockPos.z) {
-							// type 0 = air = block actually broke
-							// any other type = server restored the block (anti-cheat / protection)
 							finish(packet.type === 0);
 						}
 					};
