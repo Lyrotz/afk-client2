@@ -202,7 +202,7 @@ function manageMineInterval(botId, action) {
 			} finally {
 				activeBot.isMining = false;
 			}
-		}, 500);
+		}, 1000);
 		mineIntervals[botId] = intervalId;
 		return {
 			status: 'success',
