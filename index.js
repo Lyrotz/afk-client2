@@ -10,8 +10,8 @@ const BOT_DEFAULTS = {
 
 const activeBots = new Map()
 const registeredBots = new Set()
-// Track bots that are in the process of being deleted so retries don't re-add them
 const deletedBots = new Set()
+const retryingBots = new Set() // track bots already scheduled for retry
 let ws
 
 // ---- Bot management ----
@@ -19,15 +19,38 @@ let ws
 let spawnQueue = Promise.resolve()
 
 function queueCreateBot(username) {
-    deletedBots.delete(username) // clear deleted flag if re-creating
+    deletedBots.delete(username)
+    // Don't queue if already active or already retrying
+    if (activeBots.has(username) || retryingBots.has(username)) {
+        console.log(`${username} already active or retrying, skipping duplicate createBot`)
+        return
+    }
     spawnQueue = spawnQueue.then(() => {
         createBot(username)
         return new Promise(resolve => setTimeout(resolve, 5000))
     })
 }
 
+function scheduleRetry(username) {
+    if (deletedBots.has(username)) {
+        console.log(`${username} was deleted, not retrying`)
+        return
+    }
+    if (retryingBots.has(username)) {
+        console.log(`${username} already scheduled for retry, skipping`)
+        return
+    }
+    retryingBots.add(username)
+    console.log(`${username} reconnecting in 30s...`)
+    setTimeout(() => {
+        retryingBots.delete(username)
+        if (!deletedBots.has(username)) {
+            createBot(username)
+        }
+    }, 30000)
+}
+
 function createBot(username) {
-    // Don't create if it was deleted while queued
     if (deletedBots.has(username)) {
         console.log(`${username} was deleted while queued, skipping`)
         return
@@ -40,17 +63,13 @@ function createBot(username) {
         clearInterval(bot._survivalInterval)
         activeBots.delete(username)
         sendBotList()
-        if (deletedBots.has(username)) {
-            console.log(`${username} was deleted, not retrying`)
-            return
-        }
-        console.log(`${username} retrying in 30s...`)
-        setTimeout(() => createBot(username), 30000)
+        scheduleRetry(username)
     })
 
     bot.on("spawn", () => {
         console.log(`${username} spawned`)
-        activeBots.set(username, bot) // ensure it's in the map after spawn
+        retryingBots.delete(username) // clear retry flag on successful spawn
+        activeBots.set(username, bot)
         sendBotList()
 
         if (!registeredBots.has(username)) {
@@ -73,31 +92,23 @@ function createBot(username) {
         clearInterval(bot._survivalInterval)
         activeBots.delete(username)
         sendBotList()
-        if (deletedBots.has(username)) {
-            console.log(`${username} was deleted, not retrying`)
-            return
-        }
-        console.log(`${username} reconnecting in 30s...`)
-        setTimeout(() => createBot(username), 30000)
+        scheduleRetry(username)
     })
 
     bot.on("end", () => {
+        console.log(`${username} ended`)
         clearInterval(bot._survivalInterval)
         activeBots.delete(username)
         sendBotList()
-        if (deletedBots.has(username)) {
-            console.log(`${username} was deleted, not retrying`)
-            return
-        }
-        console.log(`${username} ended, reconnecting in 30s...`)
-        setTimeout(() => createBot(username), 30000)
+        scheduleRetry(username)
     })
 
     activeBots.set(username, bot)
 }
 
 function deleteBot(username) {
-    deletedBots.add(username) // prevent retries
+    deletedBots.add(username)
+    retryingBots.delete(username)
     const bot = activeBots.get(username)
     if (!bot) return
 
@@ -160,8 +171,8 @@ function connect() {
     })
 
     ws.on("close", () => {
-        console.log("disconnected, retrying in 5s...")
-        setTimeout(connect, 5000)
+        console.log("disconnected, retrying in 30s...")
+        setTimeout(connect, 30000)
     })
 
     ws.on("error", () => ws.close())
