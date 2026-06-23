@@ -3,7 +3,7 @@ const WebSocket = require("ws")
 
 const SERVER_URL = "wss://afk-server-production-c4a4.up.railway.app"
 const BOT_DEFAULTS = {
-    host: 'due-guaranteed.gl.joinmc.link',
+    host: 'play.tulparmc.com',
     port: 25565,
     version: "1.19.4",
 }
