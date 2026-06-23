@@ -1,16 +1,17 @@
 {
-  "name": "tulpar-bot-manager",
+  "name": "bot-testing",
   "version": "1.0.0",
-  "description": "Mineflayer bot manager app with Express GUI",
+  "description": "",
+  "license": "ISC",
+  "author": "",
+  "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "mineflayer": "^4.20.0"
-  },
-  "engines": {
-    "node": ">=18.x"
+    "mineflayer": "^4.37.1",
+    "prismarine-viewer": "^1.33.0",
+    "ws": "^8.21.0"
   }
 }
