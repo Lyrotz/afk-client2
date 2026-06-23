@@ -9,6 +9,7 @@ const BOT_DEFAULTS = {
 }
 
 const activeBots = new Map()
+const registeredBots = new Set() // track which accounts have already registered
 let ws
 
 // ---- Bot management ----
@@ -26,23 +27,31 @@ function createBot(username) {
     const bot = mineflayer.createBot({ ...BOT_DEFAULTS, username })
 
     bot.on("error", (err) => {
-    console.log(`${username} error:`, err.message)
-    clearInterval(bot._survivalInterval)
-    activeBots.delete(username)
-    sendBotList()
-    console.log(`${username} retrying in 30s...`)
-    setTimeout(() => createBot(username), 30000)
+        console.log(`${username} error:`, err.message)
+        clearInterval(bot._survivalInterval)
+        activeBots.delete(username)
+        sendBotList()
+        console.log(`${username} retrying in 30s...`)
+        setTimeout(() => createBot(username), 30000)
     })
 
     bot.on("spawn", () => {
         sendBotList()
 
-        // Login sequence: /login after 3s, /survival 5s after that
-        setTimeout(() => bot.chat("/register asdasd123 asdasd123"), 3000)
-        setTimeout(() => bot.chat("/login asdasd123"), 8000)
-        setTimeout(() => bot.chat("/survival"), 12000)
+        if (!registeredBots.has(username)) {
+            // First time — register then login
+            setTimeout(() => bot.chat("/register asdasd123 asdasd123"), 3000)
+            setTimeout(() => bot.chat("/login asdasd123"), 8000)
+            setTimeout(() => {
+                registeredBots.add(username)
+                bot.chat("/survival")
+            }, 12000)
+        } else {
+            // Already registered — just login
+            setTimeout(() => bot.chat("/login asdasd123"), 3000)
+            setTimeout(() => bot.chat("/survival"), 8000)
+        }
 
-        // Repeat /survival every 10 minutes
         bot._survivalInterval = setInterval(() => bot.chat("/survival"), 10 * 60 * 1000)
     })
 
