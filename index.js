@@ -25,7 +25,14 @@ function queueCreateBot(username) {
 function createBot(username) {
     const bot = mineflayer.createBot({ ...BOT_DEFAULTS, username })
 
-    bot.on("error", console.log)
+    bot.on("error", (err) => {
+    console.log(`${username} error:`, err.message)
+    clearInterval(bot._survivalInterval)
+    activeBots.delete(username)
+    sendBotList()
+    console.log(`${username} retrying in 30s...`)
+    setTimeout(() => createBot(username), 30000)
+    })
 
     bot.on("spawn", () => {
         sendBotList()
