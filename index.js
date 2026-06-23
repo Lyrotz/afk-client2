@@ -9,7 +9,9 @@ const BOT_DEFAULTS = {
 }
 
 const activeBots = new Map()
-const registeredBots = new Set() // track which accounts have already registered
+const registeredBots = new Set()
+// Track bots that are in the process of being deleted so retries don't re-add them
+const deletedBots = new Set()
 let ws
 
 // ---- Bot management ----
@@ -17,6 +19,7 @@ let ws
 let spawnQueue = Promise.resolve()
 
 function queueCreateBot(username) {
+    deletedBots.delete(username) // clear deleted flag if re-creating
     spawnQueue = spawnQueue.then(() => {
         createBot(username)
         return new Promise(resolve => setTimeout(resolve, 5000))
@@ -24,6 +27,12 @@ function queueCreateBot(username) {
 }
 
 function createBot(username) {
+    // Don't create if it was deleted while queued
+    if (deletedBots.has(username)) {
+        console.log(`${username} was deleted while queued, skipping`)
+        return
+    }
+
     const bot = mineflayer.createBot({ ...BOT_DEFAULTS, username })
 
     bot.on("error", (err) => {
@@ -31,15 +40,20 @@ function createBot(username) {
         clearInterval(bot._survivalInterval)
         activeBots.delete(username)
         sendBotList()
+        if (deletedBots.has(username)) {
+            console.log(`${username} was deleted, not retrying`)
+            return
+        }
         console.log(`${username} retrying in 30s...`)
         setTimeout(() => createBot(username), 30000)
     })
 
     bot.on("spawn", () => {
+        console.log(`${username} spawned`)
+        activeBots.set(username, bot) // ensure it's in the map after spawn
         sendBotList()
 
         if (!registeredBots.has(username)) {
-            // First time — register then login
             setTimeout(() => bot.chat("/register asdasd123 asdasd123"), 3000)
             setTimeout(() => bot.chat("/login asdasd123"), 8000)
             setTimeout(() => {
@@ -47,7 +61,6 @@ function createBot(username) {
                 bot.chat("/survival")
             }, 12000)
         } else {
-            // Already registered — just login
             setTimeout(() => bot.chat("/login asdasd123"), 3000)
             setTimeout(() => bot.chat("/survival"), 8000)
         }
@@ -60,18 +73,25 @@ function createBot(username) {
         clearInterval(bot._survivalInterval)
         activeBots.delete(username)
         sendBotList()
+        if (deletedBots.has(username)) {
+            console.log(`${username} was deleted, not retrying`)
+            return
+        }
         console.log(`${username} reconnecting in 30s...`)
         setTimeout(() => createBot(username), 30000)
     })
 
     bot.on("end", () => {
         clearInterval(bot._survivalInterval)
+        activeBots.delete(username)
+        sendBotList()
     })
 
     activeBots.set(username, bot)
 }
 
 function deleteBot(username) {
+    deletedBots.add(username) // prevent retries
     const bot = activeBots.get(username)
     if (!bot) return
 
