@@ -51,32 +51,49 @@ function initBot(username, password) {
 	});
 	bot.originalName = username;
 	bot.loginPassword = password;
-	bot.once('spawn', () => {
-		sendLog(`${username} spawned. Executing login...`);
-		setTimeout(() => {
-			bot.chat(`/login ${password}`);
-			setTimeout(() => {
-				bot.chat('/survival');
-				sendLog(`${username} executed /survival.`);
-				survivalIntervals[botId] = setInterval(() => {
-					if (bots[botId]) {
-						bots[botId].chat('/survival');
-						sendLog(`${username} auto-executed /survival (10m loop).`);
-					}
-				}, 600000);
-				if (attackConfigs[botId] && attackConfigs[botId].active) {
-					sendLog(`Resuming attack loop for ${username}...`);
-					delete attackIntervals[botId];
-					manageAttackInterval(botId, attackConfigs[botId].delay, 'start');
-				}
-				if (potionConfigs[botId] && potionConfigs[botId].active) {
-					sendLog(`Resuming Honey Bottle loop for ${username}...`);
-					delete potionIntervals[botId];
-					managePotionInterval(botId, 'start');
-				}
-			}, 3000);
-		}, 1000);
-	});
+bot.once('spawn', () => {
+    sendLog(`${username} spawned. Preparing auth...`);
+
+    // Step 1: wait 2s then register
+    setTimeout(() => {
+        bot.chat(`/register ${password} ${password}`);
+        sendLog(`${username} sent /register`);
+
+        // Step 2: wait 5s then login
+        setTimeout(() => {
+            bot.chat(`/login ${password}`);
+            sendLog(`${username} logged in.`);
+
+            // Step 3: continue existing flow
+            setTimeout(() => {
+                bot.chat('/survival');
+                sendLog(`${username} executed /survival.`);
+
+                survivalIntervals[botId] = setInterval(() => {
+                    if (bots[botId]) {
+                        bots[botId].chat('/survival');
+                        sendLog(`${username} auto-executed /survival (10m loop).`);
+                    }
+                }, 600000);
+
+                if (attackConfigs[botId]?.active) {
+                    sendLog(`Resuming attack loop for ${username}...`);
+                    delete attackIntervals[botId];
+                    manageAttackInterval(botId, attackConfigs[botId].delay, 'start');
+                }
+
+                if (potionConfigs[botId]?.active) {
+                    sendLog(`Resuming Honey Bottle loop for ${username}...`);
+                    delete potionIntervals[botId];
+                    managePotionInterval(botId, 'start');
+                }
+
+            }, 3000);
+
+        }, 5000);
+
+    }, 2000);
+});
 	bot.on('chat', (usernameSender, message) => {
 		if (usernameSender === bot.username) return;
 		sendLog(`[CHAT] <${usernameSender}> ${message}`);
