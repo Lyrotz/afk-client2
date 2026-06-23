@@ -1,7 +1,7 @@
 const mineflayer = require("mineflayer")
 const WebSocket = require("ws")
 
-const SERVER_URL = "wss://afk-server-production-c4a4.up.railway.app/"
+const SERVER_URL = "wss://afk-server-production-c4a4.up.railway.app"
 const BOT_DEFAULTS = {
     host: 'play.tulparmc.com',
     port: 25565,
