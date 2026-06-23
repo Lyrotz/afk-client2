@@ -85,6 +85,12 @@ function createBot(username) {
         clearInterval(bot._survivalInterval)
         activeBots.delete(username)
         sendBotList()
+        if (deletedBots.has(username)) {
+            console.log(`${username} was deleted, not retrying`)
+            return
+        }
+        console.log(`${username} ended, reconnecting in 30s...`)
+        setTimeout(() => createBot(username), 30000)
     })
 
     activeBots.set(username, bot)
