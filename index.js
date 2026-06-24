@@ -323,7 +323,7 @@ app.post('/api/bots/warp-arena', async (req, res) => {
 		sendLog(`${bot.originalName} → /warp arena`);
 	});
 
-	await sleep(3000);
+	await sleep(10000);
 
 	// Step 2 — each bot drops inventory then /back (parallel)
 	await Promise.all(allBots.map(async (bot) => {
