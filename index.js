@@ -13,6 +13,8 @@ const potionIntervals = {};
 const potionConfigs = {};
 const clients = [];
 
+//
+
 const HONEY_BOTTLE_INTERVAL_MS = 39 * 60 * 1000; // 39 minutes
 
 function sendLog(msg) {
