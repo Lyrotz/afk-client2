@@ -1,517 +1,609 @@
 <!DOCTYPE html>
- <html lang="en">
-   <head>
-     <meta charset="UTF-8">
-     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-     <title>TULPAR_OS_V2</title>
-     <style>
-       @import url('https://fonts.googleapis.com/css2?family=VT323&display=swap');
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tulpar Bot Manager</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-       :root {
-         --bg: #050505;
-         --fg: #33ff00;
-         --muted: #1f521f;
-         --glow: 0 0 5px rgba(51, 255, 0, 0.4);
-         --scanline: rgba(0, 0, 0, 0.15);
-       }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px;
+      background: #f4f5f7;
+      color: #1a1a2e;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
 
-       ::selection {
-         background: var(--fg);
-         color: var(--bg);
-         text-shadow: none;
-       }
+    /* ── Header ── */
+    #header {
+      background: #1a1a2e;
+      color: #fff;
+      padding: 0 16px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #header h1 { font-size: 14px; font-weight: 600; letter-spacing: 0.5px; }
+    #header-right { display: flex; align-items: center; gap: 16px; font-size: 12px; color: #aaa; }
+    #clock { font-variant-numeric: tabular-nums; }
+    #status-badge {
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-size: 11px;
+      font-weight: 600;
+      background: #3a3a50;
+      color: #aaa;
+    }
+    #status-badge.ok { background: #1a4731; color: #4ade80; }
 
-       body {
-         background-color: var(--bg);
-         color: var(--fg);
-         font-family: 'VT323', monospace;
-         font-size: 1.35rem;
-         text-transform: uppercase;
-         text-shadow: var(--glow);
-         margin: 0 auto;
-         max-width: 1600px;
-         padding: 3rem;
-         line-height: 1.3;
-         overflow-x: hidden;
-       }
+    /* ── Layout ── */
+    #layout {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
 
-       body::after {
-         content: " ";
-         display: block;
-         position: fixed;
-         top: 0;
-         left: 0;
-         bottom: 0;
-         right: 0;
-         background: linear-gradient(rgba(18, 16, 16, 0) 50%, var(--scanline) 50%);
-         background-size: 100% 4px;
-         z-index: 999;
-         pointer-events: none;
-       }
+    /* ── Sidebar ── */
+    #sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      background: #fff;
+      border-right: 1px solid #e0e0e0;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
 
-       header {
-         border-bottom: 2px dashed var(--muted);
-         padding-bottom: 1.5rem;
-         margin-bottom: 3rem;
-         display: flex;
-         justify-content: space-between;
-         align-items: flex-end;
-       }
+    /* ── Main ── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #controls-area {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px;
+      align-content: start;
+    }
 
-       .logo h1 {
-         margin: 0;
-         font-size: 1.8rem;
-         font-weight: normal;
-         letter-spacing: 2px;
-         line-height: 1;
-       }
+    /* ── Sections ── */
+    .section {
+      padding: 12px 14px;
+      border-bottom: 1px solid #eee;
+    }
+    .section-title {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: #888;
+      margin-bottom: 10px;
+    }
 
-       .sys-telemetry {
-         text-align: right;
-         font-size: 1.1rem;
-         color: var(--muted);
-       }
+    /* ── Cards ── */
+    .card {
+      background: #fff;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 8px 12px;
+      background: #f8f8f8;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #555;
+    }
+    .card-body { padding: 10px 12px; }
 
-       .sys-telemetry div {
-         margin-bottom: 0.2rem;
-       }
+    /* ── Form elements ── */
+    label {
+      display: block;
+      font-size: 11px;
+      color: #777;
+      margin-bottom: 3px;
+    }
+    input[type="text"],
+    input[type="password"],
+    input[type="number"],
+    select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      color: #1a1a2e;
+      background: #fff;
+      transition: border-color 0.15s;
+    }
+    input:focus, select:focus { outline: none; border-color: #4f6ef7; }
+    input[type="number"] { -moz-appearance: textfield; }
+    input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
 
-       .sys-telemetry .active-status {
-         color: var(--fg);
-         font-weight: bold;
-       }
+    .field { margin-bottom: 8px; }
+    .field:last-child { margin-bottom: 0; }
 
-       .blink {
-         animation: blinker 1s cubic-bezier(0.5, 0, 1, 1) infinite;
-       }
+    /* ── Buttons ── */
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      padding: 6px 10px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: inherit;
+      font-weight: 500;
+      cursor: pointer;
+      transition: filter 0.1s;
+      white-space: nowrap;
+    }
+    button:hover { filter: brightness(0.92); }
+    button:active { filter: brightness(0.85); }
 
-       @keyframes blinker {
-         50% {
-           opacity: 0;
-         }
-       }
+    .btn-primary  { background: #4f6ef7; color: #fff; }
+    .btn-danger   { background: #e53e3e; color: #fff; }
+    .btn-success  { background: #38a169; color: #fff; }
+    .btn-neutral  { background: #718096; color: #fff; }
+    .btn-warning  { background: #dd6b20; color: #fff; }
+    .btn-purple   { background: #805ad5; color: #fff; }
+    .btn-dark     { background: #2d3748; color: #fff; }
+    .btn-full     { width: 100%; }
+    .btn-sm       { padding: 4px 8px; font-size: 11px; }
 
-       .grid {
-         display: grid;
-         grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-         gap: 2.5rem;
-       }
+    .btn-row { display: flex; gap: 6px; }
+    .btn-row button { flex: 1; }
+    .btn-row + .btn-row { margin-top: 6px; }
 
-       .panel {
-         border: 1px solid var(--muted);
-         padding: 2rem;
-         position: relative;
-         background: rgba(0, 10, 0, 0.3);
-         box-shadow: inset 0 0 10px rgba(51, 255, 0, 0.05);
-       }
+    /* ── Bot selector ── */
+    #bot-select { margin-bottom: 8px; }
 
-       .panel::before {
-         content: "+--- "attr(data-title) " ---+";
-         position: absolute;
-         top: -12px;
-         left: 15px;
-         background: var(--bg);
-         padding: 0 5px;
-         color: var(--fg);
-       }
+    /* ── Position info ── */
+    #pos-box {
+      background: #f0f4ff;
+      border: 1px solid #c3d0f5;
+      border-radius: 4px;
+      padding: 7px 10px;
+      font-size: 11px;
+      color: #3a4a8a;
+      display: none;
+      margin-bottom: 8px;
+    }
+    #pos-box .pos-dim { font-weight: 700; margin-bottom: 2px; text-transform: uppercase; }
+    #pos-box .pos-coords { font-variant-numeric: tabular-nums; color: #555; }
 
-       .row {
-         display: flex;
-         gap: 1.5rem;
-         margin-bottom: 1.5rem;
-         align-items: center;
-       }
+    /* ── Inventory list ── */
+    #invResult {
+      margin-top: 8px;
+      max-height: 130px;
+      overflow-y: auto;
+      font-size: 11px;
+    }
+    .inv-item {
+      display: flex;
+      justify-content: space-between;
+      padding: 3px 0;
+      border-bottom: 1px solid #f0f0f0;
+      color: #444;
+    }
+    .inv-count { color: #888; }
 
-       .input-wrap {
-         display: flex;
-         align-items: center;
-         flex: 1;
-       }
+    /* ── Console ── */
+    #log-area {
+      border-top: 1px solid #ddd;
+      background: #1a1a2e;
+      height: 160px;
+      flex-shrink: 0;
+    }
+    #log-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 12px;
+      background: #252540;
+      border-bottom: 1px solid #333355;
+    }
+    #log-header span { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+    #console {
+      height: calc(100% - 29px);
+      overflow-y: auto;
+      padding: 6px 12px;
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11px;
+      color: #a0cfb0;
+      line-height: 1.5;
+    }
+    #console div { white-space: pre-wrap; word-break: break-all; }
 
-       .input-wrap::before {
-         content: ">";
-         margin-right: 0.8rem;
-         color: var(--fg);
-       }
+    /* ── Scrollbars ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 3px; }
+    #console::-webkit-scrollbar-thumb { background: #444; }
 
-       input,
-       select {
-         background: transparent;
-         border: none;
-         border-bottom: 1px solid var(--muted);
-         color: var(--fg);
-         font-family: inherit;
-         font-size: inherit;
-         text-shadow: inherit;
-         outline: none;
-         width: 100%;
-         text-transform: uppercase;
-         padding: 4px 0;
-         transition: border-color 0.2s;
-       }
+    /* ── Info text ── */
+    .hint { font-size: 11px; color: #999; margin-bottom: 8px; line-height: 1.4; }
+  </style>
+</head>
+<body>
 
-       input:focus,
-       select:focus {
-         border-bottom-color: var(--fg);
-       }
+<!-- Header -->
+<div id="header">
+  <h1>Tulpar Bot Manager</h1>
+  <div id="header-right">
+    <span id="clock">00:00:00</span>
+    <span id="status-badge">OFFLINE</span>
+  </div>
+</div>
 
-       option {
-         background: var(--bg);
-         color: var(--fg);
-       }
+<div id="layout">
 
-       input[type="number"]::-webkit-inner-spin-button,
-       input[type="number"]::-webkit-outer-spin-button {
-         -webkit-appearance: none;
-         margin: 0;
-       }
+  <!-- Sidebar -->
+  <div id="sidebar">
 
-       input[type="number"] {
-         -moz-appearance: textfield;
-       }
+    <!-- Add Bot -->
+    <div class="section">
+      <div class="section-title">Add Bot</div>
+      <div class="field">
+        <label>Username</label>
+        <input type="text" id="user" placeholder="username" autocomplete="off">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="pass" placeholder="password">
+      </div>
+      <button class="btn-primary btn-full" onclick="addBot()">Connect Bot</button>
+    </div>
 
-       .short-input {
-         width: 70px;
-         text-align: center;
-       }
+    <!-- Batch -->
+    <div class="section">
+      <div class="section-title">Batch Login</div>
+      <div class="hint">One account per line:<br><code>username password</code></div>
+      <input type="file" id="batch-file" accept=".txt" style="display:none" onchange="handleBatchUpload(event)">
+      <button class="btn-neutral btn-full" onclick="document.getElementById('batch-file').click()">Load .txt File</button>
+    </div>
 
-       button {
-         background: transparent;
-         border: none;
-         color: var(--fg);
-         font-family: inherit;
-         font-size: inherit;
-         cursor: pointer;
-         text-shadow: inherit;
-         transition: none;
-         padding: 0;
-         white-space: nowrap;
-         letter-spacing: 1px;
-       }
+    <!-- Bot Selector -->
+    <div class="section">
+      <div class="section-title">Active Bots</div>
+      <div class="field">
+        <label>Selected Bot</label>
+        <select id="bot-select" onchange="onBotSelected()">
+          <option value="" disabled selected>— none connected —</option>
+        </select>
+      </div>
 
-       button::before {
-         content: "[ ";
-         color: var(--muted);
-       }
-
-       button::after {
-         content: " ]";
-         color: var(--muted);
-       }
-
-       button:hover {
-         background: var(--fg);
-         color: var(--bg);
-         text-shadow: none;
-       }
-
-       button:hover::before,
-       button:hover::after {
-         color: var(--bg);
-       }
-
-       .divider {
-         color: var(--muted);
-         margin: 1rem 0;
-         text-align: center;
-         overflow: hidden;
-         white-space: nowrap;
-       }
-
-       #console {
-         height: 350px;
-         overflow-y: auto;
-         border: 1px solid var(--muted);
-         padding: 1.5rem;
-         margin-top: 1rem;
-         font-size: 1.1rem;
-         text-transform: none;
-         background: rgba(0, 0, 0, 0.5);
-       }
-
-       ul {
-         list-style: none;
-         padding: 0;
-         margin: 0;
-       }
-
-       li {
-         display: flex;
-         justify-content: space-between;
-         border-bottom: 1px dotted var(--muted);
-         padding: 0.4rem 0;
-       }
-
-       ::-webkit-scrollbar {
-         width: 12px;
-       }
-
-       ::-webkit-scrollbar-track {
-         background: var(--bg);
-         border-left: 1px solid var(--muted);
-       }
-
-       ::-webkit-scrollbar-thumb {
-         background: var(--muted);
-         border: 1px solid var(--bg);
-       }
-
-       ::-webkit-scrollbar-thumb:hover {
-         background: var(--fg);
-       }
-     </style>
-   </head>
-   <body>
-     <header>
-       <div class="logo">
-         <h1> +-+-+-+-+-+-+-+-+-+ <br> |T|U|L|P|A|R|_|O|S| <br> +-+-+-+-+-+-+-+-+-+ <span class="blink">█</span>
-         </h1>
-       </div>
-       <div class="sys-telemetry">
-         <div id="clock">SYS.TIME: 00:00:00</div>
-         <div>MEM: [|||||||...] 48%</div>
-         <div>UPLINK: <span class="active-status">STABLE</span>
-         </div>
-         <div id="status" class="active-status">NET.STATE: OFFLINE</div>
-       </div>
-     </header>
-     <div class="grid">
-       <div class="panel" data-title="AUTH.SYS // ROOT">
-         <div class="row">
-           <div class="input-wrap">
-             <input id="user" placeholder="TARGET_USERNAME" autocomplete="off">
-           </div>
-         </div>
-         <div class="row">
-           <div class="input-wrap">
-             <input id="pass" type="password" placeholder="SECURITY_KEY">
-           </div>
-         </div>
-         <button onclick="addBot()" style="width: 100%;">EXECUTE_INJECTION</button>
-         <div class="divider">================================</div>
-         <div style="text-align: center; margin-bottom: 0.5rem; font-size: 0.9rem; color: var(--muted);">FORMAT: USERNAME PASSWORD (TXT)</div>
-         <input type="file" id="batch-file" accept=".txt" style="display: none;" onchange="handleBatchUpload(event)">
-         <button onclick="document.getElementById('batch-file').click()" style="width: 100%; color: #ffb000;">LOAD_BATCH_FILE</button>
-       </div>
-       <div class="panel" data-title="UNIT.CTRL // NODE_OP">
-         <div class="row">
-           <div class="input-wrap">
-             <select id="bot-select">
-               <option value="" disabled selected>AWAITING_CONNECTION...</option>
-             </select>
-           </div>
-           <button onclick="action('disconnect')">KILL_PROC</button>
-         </div>
-         <div class="divider">--------------------------------</div>
-        <div class="row">
-          <span>ATK.DLY(S):</span>
-          <input id="delay" class="short-input" type="number" step="0.5" min="0.5" value="2.0">
-          <button onclick="attack('start')" style="flex: 1;">INIT_ATK</button>
-          <button onclick="attack('stop')" style="flex: 1;">HALT_ATK</button>
+      <!-- Position / Dimension -->
+      <div id="pos-box">
+        <div class="pos-dim" id="pos-dim">overworld</div>
+        <div class="pos-coords">
+          X&nbsp;<span id="pos-x">—</span>&nbsp;
+          Y&nbsp;<span id="pos-y">—</span>&nbsp;
+          Z&nbsp;<span id="pos-z">—</span>
         </div>
-        <div class="row">
-          <button onclick="startPotionLoop()" style="width: 100%; color: #ffc233;">DRINK_HONEY_BOTTLE (39M LOOP)</button>
+      </div>
+
+      <button class="btn-danger btn-full btn-sm" onclick="action('disconnect')">Disconnect Bot</button>
+    </div>
+
+  </div><!-- /sidebar -->
+
+  <!-- Main -->
+  <div id="main">
+    <div id="controls-area">
+
+      <!-- Attack -->
+      <div class="card">
+        <div class="card-header">⚔️ Attack</div>
+        <div class="card-body">
+          <div class="field">
+            <label>Delay between hits (seconds)</label>
+            <input type="number" id="delay" step="0.5" min="0.5" value="2.0">
+          </div>
+          <div class="btn-row">
+            <button class="btn-danger" onclick="attack('start')">Start</button>
+            <button class="btn-neutral" onclick="attack('stop')">Stop</button>
+          </div>
         </div>
-         <div class="row">
-           <span>INV.SLOT:</span>
-           <select id="hotbar-slot" class="short-input">
-             <option value="0">01</option>
-             <option value="1">02</option>
-             <option value="2">03</option>
-             <option value="3">04</option>
-             <option value="4">05</option>
-             <option value="5">06</option>
-             <option value="6">07</option>
-             <option value="7">08</option>
-             <option value="8">09</option>
-           </select>
-           <button onclick="swapHotbar()" style="flex: 1;">MOUNT_EQUIPMENT</button>
-         </div>
-         <div class="divider">--------------------------------</div>
-         <button onclick="checkInventory()" style="width: 100%;">SCAN_CARGO_HOLD</button>
-         <button onclick="action('drop')" style="width: 100%; margin-top: 0.5rem; color: #ff3333;">JETTISON_CARGO_HOLD</button>
-         <div id="invResult" style="margin-top: 1rem;"></div>
-       </div>
-       <div class="panel" data-title="COMM.LINK // TX_RX">
-         <div class="row">
-           <div class="input-wrap">
-             <select id="chat-target-select">
-               <option value="all">BROADCAST_TO_ALL_NODES</option>
-             </select>
-           </div>
-         </div>
-         <div class="row">
-           <div class="input-wrap">
-             <input id="msg" placeholder="ENTER_PAYLOAD_STRING" autocomplete="off">
-           </div>
-         </div>
-         <button onclick="sendChat()" style="width: 100%;">TRANSMIT_PACKET</button>
-       </div>
-     </div>
-     <div class="panel" data-title="SYS.LOGS // STDOUT" style="margin-top: 2.5rem;">
-       <div id="console">
-         <div style="opacity: 0.5;">[INIT] Boot sequence complete.</div>
-         <div style="opacity: 0.5;">[INIT] Listening for socket events...</div>
-       </div>
-     </div>
-     <script>
-       setInterval(() => {
-         const now = new Date();
-         document.getElementById('clock').innerText = `SYS.TIME: ${now.toLocaleTimeString('en-US', { hour12: false })}`;
-       }, 1000);
-       const evtSource = new EventSource('/api/stream');
-       const cons = document.getElementById('console');
-       evtSource.onmessage = (e) => {
-         cons.innerHTML += `
-												<div>${e.data}</div>`;
-         cons.scrollTop = cons.scrollHeight;
-       };
-       const setStatus = (msg) => document.getElementById('status').innerText = `NET.STATE: ${msg}`;
-       async function req(endpoint, data) {
-         const res = await fetch(endpoint, {
-           method: 'POST',
-           headers: {
-             'Content-Type': 'application/json'
-           },
-           body: JSON.stringify(data)
-         });
-         const result = await res.json();
-         setStatus(result.message || result.error);
-         updateBotLists();
-       }
-       async function updateBotLists() {
-         const res = await fetch('/api/bots');
-         const bots = await res.json();
-         const ctrlSelect = document.getElementById('bot-select');
-         const chatSelect = document.getElementById('chat-target-select');
-         const lastCtrlVal = ctrlSelect.value;
-         const lastChatVal = chatSelect.value;
-         ctrlSelect.innerHTML = '';
-         chatSelect.innerHTML = '<option value="all">BROADCAST_TO_ALL_NODES</option>';
-         if (bots.length === 0) {
-           ctrlSelect.innerHTML = '<option value="" disabled selected>AWAITING_CONNECTION...</option>';
-           return;
-         }
-         bots.forEach(b => {
-           const opt1 = document.createElement('option');
-           opt1.value = b;
-           opt1.innerText = `NODE::${b}`;
-           ctrlSelect.appendChild(opt1);
-           const opt2 = document.createElement('option');
-           opt2.value = b;
-           opt2.innerText = `NODE::${b}`;
-           chatSelect.appendChild(opt2);
-         });
-         if (bots.includes(lastCtrlVal)) ctrlSelect.value = lastCtrlVal;
-         if (lastChatVal === 'all' || bots.includes(lastChatVal)) chatSelect.value = lastChatVal;
-       }
-       setInterval(updateBotLists, 3000);
+      </div>
 
-       function addBot() {
-         req('/api/bots/add', {
-           username: user.value,
-           password: pass.value
-         });
-         user.value = '';
-         pass.value = '';
-       }
-       // NEW: Handle reading the text file and pushing the data to the backend
-       function handleBatchUpload(event) {
-         const file = event.target.files[0];
-         if (!file) return;
-         const reader = new FileReader();
-         reader.onload = function(e) {
-           const text = e.target.result;
-           const lines = text.split('\n');
-           const accounts = [];
-           lines.forEach(line => {
-             const parts = line.trim().split(/\s+/); // Splits by any whitespace
-             if (parts.length >= 2) {
-               accounts.push({
-                 username: parts[0],
-                 password: parts[1]
-               });
-             }
-           });
-           if (accounts.length > 0) {
-             req('/api/bots/batch-add', {
-               accounts: accounts
-             });
-           } else {
-             setStatus("ERR: FILE_EMPTY_OR_INVALID");
-           }
-           // Reset file input so the same file can be uploaded again if needed
-           event.target.value = '';
-         };
-         reader.readAsText(file);
-       }
+      <!-- Sell + Drop Loop -->
+      <div class="card">
+        <div class="card-header">💰 Sell & Drop Loop</div>
+        <div class="card-body">
+          <p class="hint">
+            Sells PRISMARINE_CRYSTALS → wait 10s → PRISMARINE_SHARD → wait 10s → COD → wait 10s → wait 5s more → drop all items → wait 10s → repeat.
+          </p>
+          <div class="btn-row">
+            <button class="btn-success" onclick="manageSellDrop('start')">Start Loop</button>
+            <button class="btn-neutral" onclick="manageSellDrop('stop')">Stop Loop</button>
+          </div>
+        </div>
+      </div>
 
-       function action(type) {
-         const bot = document.getElementById('bot-select').value;
-         if (bot) req(`/api/bots/${type}`, {
-           username: bot
-         });
-       }
+      <!-- Warp Arena -->
+      <div class="card">
+        <div class="card-header">🏟️ Warp Arena — All Bots</div>
+        <div class="card-body">
+          <p class="hint">
+            All bots: <code>/warp arena</code> → wait 3s → drop all items → <code>/back</code>
+          </p>
+          <button class="btn-purple btn-full" onclick="warpArena()">Execute Warp Arena</button>
+        </div>
+      </div>
 
-       function attack(state) {
-         const bot = document.getElementById('bot-select').value;
-         const delay = parseFloat(document.getElementById('delay').value);
-         if (bot) req(`/api/bots/attack/${state}`, {
-           username: bot,
-           delay
-         });
-       }
+      <!-- Honey Bottle -->
+      <div class="card">
+        <div class="card-header">🍯 Honey Bottle</div>
+        <div class="card-body">
+          <p class="hint">Drinks a honey bottle immediately and every 39 minutes.</p>
+          <div class="btn-row">
+            <button class="btn-warning" onclick="startPotion()">Start Loop</button>
+            <button class="btn-neutral" onclick="stopPotion()">Stop Loop</button>
+          </div>
+        </div>
+      </div>
 
-       function startPotionLoop() {
-         const bot = document.getElementById('bot-select').value;
-         if (bot) req('/api/bots/potion/start', {
-           username: bot
-         });
-       }
+      <!-- Inventory -->
+      <div class="card">
+        <div class="card-header">🎒 Inventory</div>
+        <div class="card-body">
+          <div class="field">
+            <label>Hotbar Slot</label>
+            <div style="display:flex;gap:6px">
+              <select id="hotbar-slot">
+                <option value="0">Slot 1</option>
+                <option value="1">Slot 2</option>
+                <option value="2">Slot 3</option>
+                <option value="3">Slot 4</option>
+                <option value="4">Slot 5</option>
+                <option value="5">Slot 6</option>
+                <option value="6">Slot 7</option>
+                <option value="7">Slot 8</option>
+                <option value="8">Slot 9</option>
+              </select>
+              <button class="btn-dark btn-sm" onclick="swapHotbar()">Equip</button>
+            </div>
+          </div>
+          <div class="btn-row">
+            <button class="btn-neutral btn-sm" onclick="checkInventory()">Scan</button>
+            <button class="btn-danger btn-sm" onclick="action('drop')">Drop All</button>
+          </div>
+          <div id="invResult"></div>
+        </div>
+      </div>
 
-       function swapHotbar() {
-         const bot = document.getElementById('bot-select').value;
-         const slot = document.getElementById('hotbar-slot').value;
-         if (bot) req('/api/bots/hotbar', {
-           username: bot,
-           slot: slot
-         });
-       }
+      <!-- Chat -->
+      <div class="card">
+        <div class="card-header">💬 Chat</div>
+        <div class="card-body">
+          <div class="field">
+            <label>Target</label>
+            <select id="chat-target-select">
+              <option value="all">Broadcast to All Bots</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Message</label>
+            <input type="text" id="msg" placeholder="Enter message…" autocomplete="off"
+              onkeydown="if(event.key==='Enter') sendChat()">
+          </div>
+          <button class="btn-primary btn-full btn-sm" onclick="sendChat()">Send</button>
+        </div>
+      </div>
 
-       function sendChat() {
-         const target = document.getElementById('chat-target-select').value;
-         req('/api/bots/chat', {
-           target: target,
-           message: msg.value
-         });
-         msg.value = '';
-       }
-       async function checkInventory() {
-         const user = document.getElementById('bot-select').value;
-         if (!user) return;
-         const res = await fetch(`/api/bots/${user}/inventory`);
-         const data = await res.json();
-         const invContainer = document.getElementById('invResult');
-         if (data.error) {
-           invContainer.innerText = `[ERR] ${data.error}`;
-           return;
-         }
-         if (data.length === 0) {
-           invContainer.innerHTML = '<div style="text-align: center; opacity: 0.5;">[CARGO_HOLD_EMPTY]</div>';
-           return;
-         }
-         let html = '<ul>';
-         data.forEach(item => {
-           const countStr = String(item.count).padStart(3, '0');
-           html += `
-													<li>
-														<span>> ${item.name}</span>
-														<span>[x${countStr}]</span>
-													</li>`;
-         });
-         html += '</ul>';
-         invContainer.innerHTML = html;
-       }
-     </script>
-   </body>
- </html>
+    </div><!-- /controls-area -->
+
+    <!-- Log -->
+    <div id="log-area">
+      <div id="log-header">
+        <span>System Log</span>
+        <button class="btn-neutral btn-sm" onclick="clearLog()">Clear</button>
+      </div>
+      <div id="console">
+        <div style="color:#555">[INIT] Boot complete. Listening for events…</div>
+      </div>
+    </div>
+  </div><!-- /main -->
+
+</div><!-- /layout -->
+
+<script>
+  // ── Clock ──────────────────────────────────────────────────────────────────
+  setInterval(() => {
+    document.getElementById('clock').textContent =
+      new Date().toLocaleTimeString('en-US', { hour12: false });
+  }, 1000);
+
+  // ── SSE Log Stream ─────────────────────────────────────────────────────────
+  const cons = document.getElementById('console');
+  const evtSource = new EventSource('/api/stream');
+  evtSource.onmessage = (e) => {
+    const div = document.createElement('div');
+    div.textContent = e.data;
+    cons.appendChild(div);
+    if (cons.children.length > 500) cons.removeChild(cons.firstChild);
+    cons.scrollTop = cons.scrollHeight;
+  };
+
+  function clearLog() { cons.innerHTML = ''; }
+
+  // ── Status badge ───────────────────────────────────────────────────────────
+  function setStatus(msg) {
+    const el = document.getElementById('status-badge');
+    el.textContent = msg;
+    el.className = (msg && !msg.toLowerCase().includes('err') && !msg.toLowerCase().includes('offline'))
+      ? 'ok' : '';
+  }
+
+  // ── Generic POST helper ────────────────────────────────────────────────────
+  async function req(endpoint, data) {
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await res.json();
+      setStatus(result.message || result.error || 'OK');
+      await updateBotLists();
+      return result;
+    } catch (err) {
+      setStatus('Network error');
+    }
+  }
+
+  // ── Bot list update ────────────────────────────────────────────────────────
+  async function updateBotLists() {
+    const res = await fetch('/api/bots');
+    const bots = await res.json();
+    const ctrl = document.getElementById('bot-select');
+    const chat = document.getElementById('chat-target-select');
+    const prevCtrl = ctrl.value;
+    const prevChat = chat.value;
+
+    ctrl.innerHTML = '';
+    chat.innerHTML = '<option value="all">Broadcast to All Bots</option>';
+
+    if (bots.length === 0) {
+      ctrl.innerHTML = '<option value="" disabled selected>— none connected —</option>';
+      document.getElementById('pos-box').style.display = 'none';
+      setStatus('OFFLINE');
+      return;
+    }
+
+    bots.forEach(b => {
+      const o1 = new Option(b, b); ctrl.appendChild(o1);
+      const o2 = new Option(b, b); chat.appendChild(o2);
+    });
+
+    ctrl.value = bots.includes(prevCtrl) ? prevCtrl : bots[0];
+    chat.value = (prevChat === 'all' || bots.includes(prevChat)) ? prevChat : 'all';
+
+    setStatus(`${bots.length} BOT${bots.length > 1 ? 'S' : ''} ONLINE`);
+  }
+
+  setInterval(updateBotLists, 3000);
+
+  // ── Position polling ───────────────────────────────────────────────────────
+  async function pollPosition() {
+    const bot = document.getElementById('bot-select').value;
+    const box = document.getElementById('pos-box');
+    if (!bot) { box.style.display = 'none'; return; }
+    try {
+      const res = await fetch(`/api/bots/${bot}/position`);
+      if (!res.ok) { box.style.display = 'none'; return; }
+      const d = await res.json();
+      document.getElementById('pos-dim').textContent = d.dimension || '?';
+      document.getElementById('pos-x').textContent = d.x;
+      document.getElementById('pos-y').textContent = d.y;
+      document.getElementById('pos-z').textContent = d.z;
+      box.style.display = 'block';
+    } catch { box.style.display = 'none'; }
+  }
+
+  setInterval(pollPosition, 2000);
+  function onBotSelected() { pollPosition(); }
+
+  // ── Bot actions ────────────────────────────────────────────────────────────
+  function addBot() {
+    const u = document.getElementById('user');
+    const p = document.getElementById('pass');
+    if (!u.value || !p.value) return;
+    req('/api/bots/add', { username: u.value, password: p.value });
+    u.value = ''; p.value = '';
+  }
+
+  function handleBatchUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const accounts = e.target.result.split('\n')
+        .map(line => line.trim().split(/\s+/))
+        .filter(parts => parts.length >= 2)
+        .map(parts => ({ username: parts[0], password: parts[1] }));
+      if (accounts.length > 0) req('/api/bots/batch-add', { accounts });
+      else setStatus('ERR: file empty or invalid');
+      event.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  function action(type) {
+    const bot = document.getElementById('bot-select').value;
+    if (bot) req(`/api/bots/${type}`, { username: bot });
+  }
+
+  function attack(state) {
+    const bot = document.getElementById('bot-select').value;
+    const delay = parseFloat(document.getElementById('delay').value);
+    if (bot) req(`/api/bots/attack/${state}`, { username: bot, delay });
+  }
+
+  function manageSellDrop(action) {
+    const bot = document.getElementById('bot-select').value;
+    if (bot) req(`/api/bots/selldrop/${action}`, { username: bot });
+  }
+
+  function startPotion() {
+    const bot = document.getElementById('bot-select').value;
+    if (bot) req('/api/bots/potion/start', { username: bot });
+  }
+  function stopPotion() {
+    const bot = document.getElementById('bot-select').value;
+    if (bot) req('/api/bots/potion/stop', { username: bot });
+  }
+
+  function swapHotbar() {
+    const bot = document.getElementById('bot-select').value;
+    const slot = document.getElementById('hotbar-slot').value;
+    if (bot) req('/api/bots/hotbar', { username: bot, slot });
+  }
+
+  function sendChat() {
+    const target = document.getElementById('chat-target-select').value;
+    const msg = document.getElementById('msg');
+    if (!msg.value.trim()) return;
+    req('/api/bots/chat', { target, message: msg.value });
+    msg.value = '';
+  }
+
+  async function checkInventory() {
+    const bot = document.getElementById('bot-select').value;
+    if (!bot) return;
+    const res = await fetch(`/api/bots/${bot}/inventory`);
+    const data = await res.json();
+    const box = document.getElementById('invResult');
+    if (data.error) { box.textContent = `Error: ${data.error}`; return; }
+    if (data.length === 0) {
+      box.innerHTML = '<div style="color:#aaa;text-align:center;padding:6px">Inventory empty</div>';
+      return;
+    }
+    box.innerHTML = data.map(item =>
+      `<div class="inv-item"><span>${item.name}</span><span class="inv-count">×${item.count}</span></div>`
+    ).join('');
+  }
+
+  async function warpArena() {
+    await req('/api/bots/warp-arena', { target: 'all' });
+  }
+</script>
+</body>
+</html>
